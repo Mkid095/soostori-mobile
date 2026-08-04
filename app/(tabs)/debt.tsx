@@ -4,12 +4,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, Dimensions, Alert,
+  StyleSheet, Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Search, Users, FileText, Plus } from 'lucide-react-native'
 import { useTheme } from '../../src/hooks/useTheme'
 import type { Debt, Customer } from '../../src/lib/types'
-import { getAllDebts, getDebtById, createDebt, recordDebtPayment } from '../../src/services/db-debts'
+import { getAllDebts, getDebtById } from '../../src/services/db-debts'
 import { getAllCustomers } from '../../src/services/db-customers'
 import { formatCurrency, formatDate } from '../../src/lib/utils'
 import { DebtPartialPaymentModal } from '../../src/components/shared/debt-partial-payment-modal'
@@ -56,12 +57,12 @@ function DebtCard({ debt, onPress, onRecordPayment }: DebtCardProps) {
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: '700', fontSize: 15, color: text }}>{debt.customerName || 'Unknown'}</Text>
+          <Text style={{ fontWeight: '700', fontSize: 16, color: text }}>{debt.customerName || 'Unknown'}</Text>
           {debt.customerPhone && (
             <Text style={{ fontSize: 12, color: textMuted, marginTop: 2 }}>{debt.customerPhone}</Text>
           )}
-          <Text style={{ fontSize: 11, color: textMuted, marginTop: 2 }}>{formatDate(debt.createdAt)}</Text>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+          <Text style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>{formatDate(debt.createdAt)}</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
             <Text style={{ fontSize: 12, color: textMuted }}>
               Total: <Text style={{ color: text, fontWeight: '700' }}>{formatCurrency(debt.amount)}</Text>
             </Text>
@@ -70,7 +71,7 @@ function DebtCard({ debt, onPress, onRecordPayment }: DebtCardProps) {
             </Text>
           </View>
           {/* Progress bar */}
-          <View style={{ marginTop: 8, height: 5, borderRadius: 3, backgroundColor: isDark ? '#0F172A' : '#E2E8F0', overflow: 'hidden' }}>
+          <View style={{ marginTop: 10, height: 6, borderRadius: 3, backgroundColor: isDark ? '#0F172A' : '#E2E8F0', overflow: 'hidden' }}>
             <View style={{ height: '100%', width: `${paidPercent}%`, backgroundColor: statusColor, borderRadius: 3 }} />
           </View>
         </View>
@@ -78,12 +79,12 @@ function DebtCard({ debt, onPress, onRecordPayment }: DebtCardProps) {
           <View
             style={{
               backgroundColor: statusColor + '20',
-              paddingHorizontal: 8,
-              paddingVertical: 4,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
               borderRadius: 6,
             }}
           >
-            <Text style={{ color: statusColor, fontWeight: '700', fontSize: 10, textTransform: 'uppercase' }}>
+            <Text style={{ color: statusColor, fontWeight: '700', fontSize: 11, textTransform: 'capitalize' }}>
               {debt.status}
             </Text>
           </View>
@@ -100,13 +101,12 @@ function DebtCard({ debt, onPress, onRecordPayment }: DebtCardProps) {
       </View>
 
       {debt.status !== 'paid' && (
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+        <View style={{ marginTop: 12 }}>
           <TouchableOpacity
             style={{
-              flex: 1,
               backgroundColor: '#10B981',
               borderRadius: 8,
-              paddingVertical: 8,
+              paddingVertical: 10,
               alignItems: 'center',
             }}
             onPress={() => onRecordPayment(debt)}
@@ -199,17 +199,20 @@ function DebtsTab({
     <View style={{ flex: 1 }}>
       {/* Search */}
       <View style={{ padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: border, backgroundColor: card }}>
-        <TextInput
-          style={{
-            borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
-            fontSize: 15, borderWidth: 1, backgroundColor: bg,
-            color: text, borderColor: border,
-          }}
-          placeholder="Search by name or phone..."
-          placeholderTextColor={textMuted}
-          value={search}
-          onChangeText={setSearch}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Search size={16} color={textMuted} />
+          <TextInput
+            style={{
+              flex: 1, borderRadius: 10, paddingHorizontal: 4, paddingVertical: 10,
+              fontSize: 15, backgroundColor: 'transparent',
+              color: text,
+            }}
+            placeholder="Search by name or phone..."
+            placeholderTextColor={textMuted}
+            value={search}
+            onChangeText={setSearch}
+          />
+        </View>
         {/* Status filters */}
         <View style={{ flexDirection: 'row', gap: 6 }}>
           {filters.map((f) => (
@@ -253,8 +256,9 @@ function DebtsTab({
           />
         )}
         ListEmptyComponent={
-          <View style={{ padding: 60, alignItems: 'center' }}>
-            <Text style={{ color: textMuted }}>No debts found</Text>
+          <View style={{ padding: 60, alignItems: 'center', gap: 12 }}>
+            <FileText size={40} color={textMuted} />
+            <Text style={{ color: textMuted, fontSize: 14 }}>No debts found</Text>
           </View>
         }
         onRefresh={onRefresh}

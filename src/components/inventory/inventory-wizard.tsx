@@ -7,6 +7,7 @@ import { useWizardState } from '../../hooks/useWizardState'
 import type { Category } from '../../lib/types'
 import { BarcodeScannerModal } from '../shared/barcode-scanner-modal'
 import { CategoryPickerModal } from './category-picker-modal'
+import { UnitPickerModal } from './unit-picker-modal'
 import { WizardHeader } from './wizard-header'
 import { WizardFooter } from './wizard-footer'
 import { renderTypeStep } from './step-type'
@@ -49,6 +50,7 @@ export function InventoryWizard(props: WizardProps) {
         onAddCategory: addCategory,
         errors: wizard.errors,
         onOpenCategoryPicker: () => wizard.setShowCatPicker(true),
+        onOpenUnitPicker: () => wizard.setShowUnitPicker(true),
       })}</>
       case 2: return <>{renderPricingStep({
         form: form as unknown as Record<string, unknown>, set, c, errors: wizard.errors,
@@ -127,6 +129,13 @@ export function InventoryWizard(props: WizardProps) {
           setNewCatName(name)
           addCategory()
         }}
+      />
+
+      <UnitPickerModal
+        visible={wizard.showUnitPicker}
+        onClose={() => wizard.setShowUnitPicker(false)}
+        selectedUnit={wizard.form.unit}
+        onSelect={(unit) => wizard.set('unit', unit)}
       />
     </Modal>
   )

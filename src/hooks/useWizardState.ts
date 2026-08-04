@@ -9,6 +9,7 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
   const [form, setForm] = useState<ProductForm>({ ...makeInit(), ...initialForm })
   const [categories, setCategories] = useState<Category[]>([])
   const [showCatPicker, setShowCatPicker] = useState(false)
+  const [showUnitPicker, setShowUnitPicker] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -94,8 +95,8 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
   }, [form, onSave, onSaved, close, isEdit])
 
   return {
-    step, form, categories, showCatPicker, showScanner, saving, errors,
-    setForm, setStep, setShowCatPicker, setShowScanner, setSaving: setSaving,
+    step, form, categories, showCatPicker, showUnitPicker, showScanner, saving, errors,
+    setForm, setStep, setShowCatPicker, setShowUnitPicker, setShowScanner, setSaving: setSaving,
     open, close, set, next, back,
     addGroupPrice, removeGroupPrice, updateGroupPrice,
     selectCategory, generateBarcode, handleSubmit,

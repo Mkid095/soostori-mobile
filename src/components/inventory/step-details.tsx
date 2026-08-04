@@ -2,7 +2,6 @@
 import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native'
 import { Camera, ChevronDown, Plus } from 'lucide-react-native'
 import type { Category } from '../../lib/types'
-import { UNIT_OPTIONS } from './inventory-types'
 
 interface Props {
   form: Record<string, unknown>
@@ -13,6 +12,7 @@ interface Props {
   onAddCategory: (name: string) => void
   errors: Record<string, string>
   onOpenCategoryPicker: () => void
+  onOpenUnitPicker: () => void
 }
 
 function inputStyle(c: Record<string, string>, hasError?: boolean) {
@@ -25,7 +25,7 @@ function inputStyle(c: Record<string, string>, hasError?: boolean) {
 
 export function renderDetailsStep({
   form, set, c, categories, onSelectCategory, onAddCategory,
-  errors, onOpenCategoryPicker,
+  errors, onOpenCategoryPicker, onOpenUnitPicker,
 }: Props) {
   const selectedCat = categories.find((cat) => cat.id === form.categoryId)
 
@@ -102,26 +102,18 @@ export function renderDetailsStep({
       {/* Unit */}
       <View>
         <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Unit</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ gap: 8 }}>
-          {UNIT_OPTIONS.map((u) => (
-            <TouchableOpacity
-              key={u}
-              onPress={() => set('unit', u)}
-              style={{
-                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
-                backgroundColor: form.unit === u ? c.brand : c.card,
-                borderWidth: 1, borderColor: form.unit === u ? c.brand : c.border,
-              }}
-            >
-              <Text style={{
-                color: form.unit === u ? '#fff' : c.text,
-                fontWeight: '700', fontSize: 12, textTransform: 'capitalize' as const,
-              }}>
-                {u}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <TouchableOpacity
+          onPress={onOpenUnitPicker}
+          style={{
+            ...inputStyle(c),
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <Text style={{ color: form.unit ? c.text : c.textSecondary, textTransform: 'capitalize' }}>
+            {(form.unit as string) || 'Select unit'}
+          </Text>
+          <ChevronDown size={18} color={c.textSecondary} />
+        </TouchableOpacity>
       </View>
     </ScrollView>
   )
