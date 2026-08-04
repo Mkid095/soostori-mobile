@@ -1,29 +1,20 @@
 import { Tabs, useRouter } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native'
-import { ShoppingCart, BarChart3, Menu } from 'lucide-react-native'
+import { ShoppingCart, BarChart3, Menu, X } from 'lucide-react-native'
 import { useAppTheme } from '../../src/hooks/useTheme'
 import { useMenu } from '../../src/hooks/MenuContext'
-import { getShopSettings } from '../../src/services/db-settings'
 
 export default function TabsLayout() {
   const { effectiveScheme } = useAppTheme()
-  const { openMenu } = useMenu()
+  const { menuOpen, toggleMenu } = useMenu()
   const router = useRouter()
-  const [shopName, setShopName] = useState('Menu')
-
-  useEffect(() => {
-    getShopSettings().then((s) => {
-      if (s?.name) setShopName(s.name)
-    }).catch(() => { /* use default */ })
-  }, [])
 
   const isDark = effectiveScheme === 'dark'
   const barBg = isDark ? '#1e293b' : '#ffffff'
   const border = isDark ? '#334155' : '#e2e8f0'
   const brand = '#f97316'
   const inactive = '#94a3b8'
-  const active = brand
 
   return (
     <>
@@ -64,13 +55,16 @@ export default function TabsLayout() {
           <Text style={[styles.tabLabel, { color: inactive }]}>Reports</Text>
         </TouchableOpacity>
 
-        {/* Floating center FAB — perfectly centered between left and right tabs */}
+        {/* Floating center FAB — hamburger when closed, X when open */}
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: brand }]}
-          onPress={openMenu}
+          onPress={toggleMenu}
           activeOpacity={0.85}
         >
-          <Text style={styles.fabLabel} numberOfLines={1}>{shopName}</Text>
+          {menuOpen
+            ? <X size={24} color="#fff" />
+            : <Menu size={24} color="#fff" />
+          }
         </TouchableOpacity>
       </View>
     </>
@@ -100,17 +94,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 3,
   },
-  // Equal space on both sides so FAB sits centered
   centerSpacer: {
     flex: 1,
   },
   fab: {
     position: 'absolute',
-    // Center between left-tab-end and right-tab-start
-    // bar paddingHorizontal = 0, each tab flex = 1, centerSpacer flex = 1
-    // FAB is centered at the exact horizontal center of the bar
     alignSelf: 'center',
-    left: '25%',      // = 50% - half FAB width
+    left: '25%',
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -121,11 +111,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 14,
-  },
-  fabLabel: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.2,
   },
 })
