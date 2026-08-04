@@ -1,0 +1,145 @@
+// Step 2: Pricing & Stock
+import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import { X } from 'lucide-react-native'
+import type { ProductType } from './inventory-types'
+
+interface GroupPrice {
+  name: string; price: string; minQuantity: string
+}
+
+interface Props {
+  form: Record<string, any>
+  set: (k: string, v: any) => void
+  c: any
+  errors: Record<string, string>
+  onAddGroupPrice: () => void
+  onRemoveGroupPrice: (i: number) => void
+  onUpdateGroupPrice: (i: number, f: keyof GroupPrice, v: string) => void
+  isEdit: boolean
+}
+
+const baseInput = { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, borderWidth: 1 }
+
+function inputStyle(c: any, hasError?: string) {
+  return {
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+    fontSize: 15, borderWidth: 1,
+    backgroundColor: c.card, color: c.text, borderColor: hasError ? c.danger : c.border,
+  }
+}
+
+function ToggleRow({ label, checked, onToggle, c }: { label: string; checked: boolean; onToggle: () => void; c: any }) {
+  return (
+    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }} onPress={onToggle}>
+      <View style={{
+        width: 22, height: 22, borderRadius: 6,
+        backgroundColor: checked ? c.brand : c.card,
+        borderWidth: 1, borderColor: checked ? c.brand : c.border,
+        justifyContent: 'center', alignItems: 'center',
+      }}>
+        {checked && <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: '#fff' }} />}
+      </View>
+      <Text style={{ color: c.text, fontSize: 14 }}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+export function renderPricingStep({
+  form, set, c, errors, onAddGroupPrice, onRemoveGroupPrice, onUpdateGroupPrice, isEdit,
+}: Props) {
+  const isLoose = form.productType !== 'bulk'
+
+  return (
+    <ScrollView style={{ gap: 14 }} showsVerticalScrollIndicator={false}>
+      {/* Loose pricing */}
+      {isLoose && (
+        <>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Buying Price *</Text>
+              <TextInput style={inputStyle(c, errors.costPrice)} placeholder="0.00" placeholderTextColor={c.textSecondary} value={form.costPrice || ''} onChangeText={(v) => set('costPrice', v)} keyboardType="decimal-pad" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Selling Price *</Text>
+              <TextInput style={inputStyle(c, errors.sellingPrice)} placeholder="0.00" placeholderTextColor={c.textSecondary} value={form.sellingPrice || ''} onChangeText={(v) => set('sellingPrice', v)} keyboardType="decimal-pad" />
+            </View>
+          </View>
+          {form.costPrice && form.sellingPrice && (
+            <View style={{ backgroundColor: c.card, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: c.border }}>
+              <Text style={{ color: c.textSecondary, fontSize: 12 }}>Profit Margin</Text>
+              <Text style={{ color: c.success, fontSize: 16, fontWeight: '800' }}>
+                {((parseFloat(form.sellingPrice) - parseFloat(form.costPrice)).toFixed(2))} (
+                {parseFloat(form.costPrice) > 0 ? ((parseFloat(form.sellingPrice) - parseFloat(form.costPrice)) / parseFloat(form.costPrice) * 100).toFixed(0) : 0}%)
+              </Text>
+            </View>
+          )}
+          <ToggleRow label="Allow single unit sale" checked={form.allowSingleUnitSale} onToggle={() => set('allowSingleUnitSale', !form.allowSingleUnitSale)} c={c} />
+        </>
+      )}
+
+      {/* Bulk pricing */}
+      {!isLoose && (
+        <>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Units per Box</Text>
+              <TextInput style={inputStyle(c)} placeholder="e.g. 24" placeholderTextColor={c.textSecondary} value={form.unitsPerPackage || ''} onChangeText={(v) => set('unitsPerPackage', v)} keyboardType="number-pad" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Box Buying Price</Text>
+              <TextInput style={inputStyle(c)} placeholder="0.00" placeholderTextColor={c.textSecondary} value={form.boxBuyingPrice || ''} onChangeText={(v) => set('boxBuyingPrice', v)} keyboardType="decimal-pad" />
+            </View>
+          </View>
+          {form.unitsPerPackage && form.boxBuyingPrice && (
+            <View style={{ backgroundColor: c.card, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: c.border }}>
+              <Text style={{ color: c.textSecondary, fontSize: 12 }}>Cost per Unit</Text>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>
+                {(parseFloat(form.boxBuyingPrice) / parseInt(form.unitsPerPackage)).toFixed(2)}
+              </Text>
+            </View>
+          )}
+          <View>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Selling Price per Box</Text>
+            <TextInput style={inputStyle(c, errors.sellingPrice)} placeholder="0.00" placeholderTextColor={c.textSecondary} value={form.sellingPrice || ''} onChangeText={(v) => set('sellingPrice', v)} keyboardType="decimal-pad" />
+          </View>
+        </>
+      )}
+
+      {/* Group Prices */}
+      <View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>Group Prices</Text>
+          <TouchableOpacity onPress={onAddGroupPrice}>
+            <Text style={{ color: c.brand, fontWeight: '700', fontSize: 13 }}>+ Add Tier</Text>
+          </TouchableOpacity>
+        </View>
+        {(form.groupPrices || []).map((gp: GroupPrice, i: number) => (
+          <View key={i} style={{ flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <TextInput style={{ ...baseInput, flex: 1, backgroundColor: c.card, color: c.text, borderColor: c.border }} placeholder="Min Qty" placeholderTextColor={c.textSecondary} value={gp.minQuantity} onChangeText={(v) => onUpdateGroupPrice(i, 'minQuantity', v)} keyboardType="number-pad" />
+            <TextInput style={{ ...baseInput, flex: 1, backgroundColor: c.card, color: c.text, borderColor: c.border }} placeholder="Price" placeholderTextColor={c.textSecondary} value={gp.price} onChangeText={(v) => onUpdateGroupPrice(i, 'price', v)} keyboardType="decimal-pad" />
+            <TouchableOpacity onPress={() => onRemoveGroupPrice(i)} style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center' }}>
+              <X size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ))}
+        {(!form.groupPrices || form.groupPrices.length === 0) && (
+          <Text style={{ color: c.textSecondary, fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>No group prices added</Text>
+        )}
+      </View>
+
+      {/* Stock */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>{isEdit ? 'Stock Quantity' : 'Opening Stock'}</Text>
+          <TextInput style={inputStyle(c)} placeholder="0" placeholderTextColor={c.textSecondary} value={form.stockQuantity || ''} onChangeText={(v) => set('stockQuantity', v)} keyboardType="number-pad" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Low Stock Alert</Text>
+          <TextInput style={inputStyle(c)} placeholder="10" placeholderTextColor={c.textSecondary} value={form.lowStockThreshold || ''} onChangeText={(v) => set('lowStockThreshold', v)} keyboardType="number-pad" />
+        </View>
+      </View>
+
+      <ToggleRow label="Track inventory for this product" checked={form.trackInventory} onToggle={() => set('trackInventory', !form.trackInventory)} c={c} />
+    </ScrollView>
+  )
+}

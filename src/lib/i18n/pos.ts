@@ -1,0 +1,41 @@
+// pos.* — Point of Sale screen strings
+type Table = Record<string, string>
+
+export const pos: { en: Table; sw: Table } = {
+  en: {
+    'pos.searchPlaceholder': 'Search or scan barcode...',
+    'pos.noProductsFound': 'No products found',
+    'pos.cart': 'Cart',
+    'pos.total': 'Total',
+    'pos.items': 'items',
+    'pos.checkout': 'Checkout',
+    'pos.clearCart': 'Clear',
+    'pos.paymentMethod': 'Payment Method',
+    'pos.cash': 'Cash',
+    'pos.mpesa': 'M-Pesa',
+    'pos.debt': 'Debt',
+    'pos.completeSale': 'Complete Sale',
+    'pos.processing': 'Processing...',
+    'pos.saleComplete': 'Sale Complete!',
+    'pos.inStock': 'in stock',
+    'pos.left': 'left',
+  },
+  sw: {
+    'pos.searchPlaceholder': 'Tafuta au scan barcode...',
+    'pos.noProductsFound': 'Hakuna bidhaa zilizopatikana',
+    'pos.cart': 'Cart',
+    'pos.total': 'Jumla',
+    'pos.items': 'vifurushi',
+    'pos.checkout': 'Malipo',
+    'pos.clearCart': 'Futa',
+    'pos.paymentMethod': 'Njia ya Kulipa',
+    'pos.cash': 'Pesa Taslimu',
+    'pos.mpesa': 'M-Pesa',
+    'pos.debt': 'Deni',
+    'pos.completeSale': 'Maliza Mauzo',
+    'pos.processing': 'Inaprosesi...',
+    'pos.saleComplete': 'Mauzo Yamefanau!',
+    'pos.inStock': 'hisa',
+    'pos.left': 'baki',
+  },
+}
