@@ -29,7 +29,8 @@ const MENU_ITEMS: NavItem[] = [
 ]
 
 const { height: SCREEN_H } = Dimensions.get('window')
-const PANEL_HEIGHT = Math.min(SCREEN_H * 0.72, 560)
+// Bottom tab bar is ~80px, so reduce panel height to avoid overlap
+const PANEL_HEIGHT = Math.min(SCREEN_H * 0.72, 560) - 80
 
 export function AppMenu() {
   const { bg, card, text, textSecondary, border, brand } = useTheme()
@@ -182,11 +183,12 @@ const s = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    height: PANEL_HEIGHT,
     alignItems: 'center',
   },
   panel: {
     width: '100%',
-    maxHeight: Math.min(Dimensions.get('window').height * 0.72, 560),
+    height: PANEL_HEIGHT,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1,

@@ -1,21 +1,28 @@
 import { Tabs, useRouter } from 'expo-router'
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native'
-import { ShoppingCart, BarChart3, Package, Menu } from 'lucide-react-native'
+import { ShoppingCart, BarChart3, Menu } from 'lucide-react-native'
 import { useAppTheme } from '../../src/hooks/useTheme'
 import { useMenu } from '../../src/hooks/MenuContext'
+import { getShopSettings } from '../../src/services/db-settings'
 
 const TABS = [
   { name: 'pos', label: 'POS', icon: ShoppingCart },
   { name: 'reports', label: 'Reports', icon: BarChart3 },
-  { name: 'inventory', label: 'Stock', icon: Package },
 ] as const
 
 export default function TabsLayout() {
   const { effectiveScheme } = useAppTheme()
   const { openMenu } = useMenu()
   const router = useRouter()
+  const [shopName, setShopName] = useState('Menu')
   const isDark = effectiveScheme === 'dark'
+
+  useEffect(() => {
+    getShopSettings().then((s) => {
+      if (s?.name) setShopName(s.name)
+    }).catch(() => {/* use default */})
+  }, [])
 
   const barBg = isDark ? '#1e293b' : '#ffffff'
   const border = isDark ? '#334155' : '#e2e8f0'
@@ -61,7 +68,7 @@ export default function TabsLayout() {
             onPress={openMenu}
             activeOpacity={0.85}
           >
-            <Menu size={26} color="#fff" />
+            <Text style={styles.fabLabel} numberOfLines={1}>{shopName}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -102,15 +109,21 @@ const styles = StyleSheet.create({
     marginLeft: -28,
   },
   fab: {
-    width: 56,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 18,
     shadowColor: '#f97316',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
     elevation: 12,
+  },
+  fabLabel: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 })
