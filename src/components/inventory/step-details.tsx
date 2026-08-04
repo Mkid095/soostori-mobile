@@ -1,6 +1,6 @@
 // Step 1: Product details (name, SKU, category, unit)
 import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native'
-import { Camera, ChevronDown } from 'lucide-react-native'
+import { Camera, ChevronDown, Plus } from 'lucide-react-native'
 import type { Category } from '../../lib/types'
 import { UNIT_OPTIONS } from './inventory-types'
 
@@ -10,7 +10,7 @@ interface Props {
   c: Record<string, string>
   categories: Category[]
   onSelectCategory: (cat: Category) => void
-  onAddCategory: () => void
+  onAddCategory: (name: string) => void
   errors: Record<string, string>
   onOpenCategoryPicker: () => void
 }
@@ -68,23 +68,35 @@ export function renderDetailsStep({
       {/* Category */}
       <View>
         <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Category</Text>
-        <TouchableOpacity
-          onPress={onOpenCategoryPicker}
-          style={{
-            ...inputStyle(c),
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          }}
-        >
-          {selectedCat ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedCat.color }} />
-              <Text style={{ color: c.text, fontWeight: '600' }}>{selectedCat.name}</Text>
-            </View>
-          ) : (
-            <Text style={{ color: c.textSecondary }}>Select category</Text>
-          )}
-          <ChevronDown size={18} color={c.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            onPress={onOpenCategoryPicker}
+            style={{
+              ...inputStyle(c),
+              flex: 1,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            }}
+          >
+            {selectedCat ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: selectedCat.color }} />
+                <Text style={{ color: c.text, fontWeight: '600' }}>{selectedCat.name}</Text>
+              </View>
+            ) : (
+              <Text style={{ color: c.textSecondary }}>Select category</Text>
+            )}
+            <ChevronDown size={18} color={c.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onOpenCategoryPicker}
+            style={{
+              width: 48, height: 48, borderRadius: 10,
+              backgroundColor: c.brand, justifyContent: 'center', alignItems: 'center',
+            }}
+          >
+            <Plus size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Unit */}

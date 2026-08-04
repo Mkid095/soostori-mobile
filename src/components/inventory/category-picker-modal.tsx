@@ -1,11 +1,12 @@
-// CategoryPickerModal — scrollable modal picker with search
+// CategoryPickerModal — scrollable modal picker with search and create
 import { useState } from 'react'
 import {
   View, Text, TouchableOpacity, Modal, TextInput,
-  ScrollView, StyleSheet,
+  ScrollView,
 } from 'react-native'
-import { X, Search, Check } from 'lucide-react-native'
+import { X, Search, Check, Plus } from 'lucide-react-native'
 import type { Category } from '../../lib/types'
+import { categoryPickerStyles as s } from './category-picker-styles'
 
 interface Props {
   visible: boolean
@@ -13,13 +14,16 @@ interface Props {
   categories: Category[]
   selectedId?: string
   onSelect: (cat: Category) => void
-  onAddNew: () => void
+  onAddNew: (name: string) => void
 }
 
 export function CategoryPickerModal({
   visible, onClose, categories, selectedId, onSelect, onAddNew,
 }: Props) {
   const [search, setSearch] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName] = useState('')
+
   const filtered = categories.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -30,21 +34,29 @@ export function CategoryPickerModal({
     setSearch('')
   }
 
+  function handleCreate() {
+    if (!newName.trim()) return
+    onAddNew(newName.trim())
+    setNewName('')
+    setShowCreate(false)
+    onClose()
+  }
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-        <View style={styles.sheet}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Select Category</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
+        <View style={s.sheet} onStartShouldSetResponder={() => true}>
+          <View style={s.header}>
+            <Text style={s.title}>Select Category</Text>
+            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
               <X size={20} color="#64748b" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.searchRow}>
-            <Search size={16} color="#94a3b8" style={styles.searchIcon} />
+          <View style={s.searchRow}>
+            <Search size={16} color="#94a3b8" style={s.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={s.searchInput}
               placeholder="Search categories..."
               placeholderTextColor="#94a3b8"
               value={search}
@@ -53,78 +65,52 @@ export function CategoryPickerModal({
             />
           </View>
 
-          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-            {filtered.length === 0 ? (
-              <Text style={styles.empty}>No categories found</Text>
+          <ScrollView style={s.list} showsVerticalScrollIndicator={false}>
+            {filtered.length === 0 && !showCreate ? (
+              <Text style={s.empty}>No categories found</Text>
             ) : (
               filtered.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
-                  style={[
-                    styles.item,
-                    selectedId === cat.id && { backgroundColor: cat.color + '20' },
-                  ]}
+                  style={[s.item, selectedId === cat.id && s.itemSelected]}
                   onPress={() => handleSelect(cat)}
                 >
-                  <View style={[styles.colorDot, { backgroundColor: cat.color }]} />
-                  <Text style={styles.itemText}>{cat.name}</Text>
+                  <View style={[s.colorDot, { backgroundColor: cat.color }]} />
+                  <Text style={[s.itemText, selectedId === cat.id && s.itemTextSelected]}>
+                    {cat.name}
+                  </Text>
                   {selectedId === cat.id && (
-                    <Check size={16} color={cat.color} style={styles.checkIcon} />
+                    <View style={s.checkBadge}>
+                      <Check size={14} color="#fff" />
+                    </View>
                   )}
                 </TouchableOpacity>
               ))
             )}
-          </ScrollView>
 
-          <TouchableOpacity style={styles.addBtn} onPress={() => { onAddNew(); onClose() }}>
-            <Text style={styles.addBtnText}>+ Add New Category</Text>
-          </TouchableOpacity>
+            {showCreate ? (
+              <View style={s.createRow}>
+                <TextInput
+                  style={s.createInput}
+                  placeholder="Category name"
+                  placeholderTextColor="#94a3b8"
+                  value={newName}
+                  onChangeText={setNewName}
+                  autoFocus
+                />
+                <TouchableOpacity style={s.createBtn} onPress={handleCreate}>
+                  <Text style={s.createBtnText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={s.addBtn} onPress={() => setShowCreate(true)}>
+                <Plus size={16} color="#f97316" />
+                <Text style={s.addBtnText}>Create New Category</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </View>
       </TouchableOpacity>
     </Modal>
   )
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', padding: 20,
-  },
-  sheet: {
-    backgroundColor: '#fff', borderRadius: 16, maxHeight: '80%',
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
-  },
-  title: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center',
-  },
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    margin: 12, paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0',
-  },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#0f172a' },
-  list: { maxHeight: 300, paddingHorizontal: 12 },
-  empty: {
-    textAlign: 'center', color: '#94a3b8', fontSize: 14,
-    paddingVertical: 20,
-  },
-  item: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 12, borderRadius: 10, marginBottom: 4,
-  },
-  colorDot: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
-  itemText: { flex: 1, fontSize: 15, color: '#0f172a', fontWeight: '500' },
-  checkIcon: { marginLeft: 8 },
-  addBtn: {
-    margin: 12, padding: 14, borderRadius: 10,
-    backgroundColor: '#f97316', alignItems: 'center',
-  },
-  addBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-})

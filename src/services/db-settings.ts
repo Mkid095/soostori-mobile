@@ -37,6 +37,7 @@ export async function getShopSettings(): Promise<ShopSettings | null> {
     mpesaPaybillNumber: row.mpesa_paybill_number ? String(row.mpesa_paybill_number) : undefined,
     mpesaPaybillAccount: row.mpesa_paybill_account ? String(row.mpesa_paybill_account) : undefined,
     enabledPaymentChannels: channels,
+    biometricEnabled: row.biometric_enabled === 1 || row.biometric_enabled === true,
     updatedAt: String(row.updated_at || ''),
   }
 }
@@ -61,6 +62,10 @@ export async function updateShopSettings(data: Partial<ShopSettings>): Promise<v
   if (data.enabledPaymentChannels !== undefined) {
     fields.push('enabled_payment_channels = ?')
     values.push(JSON.stringify(data.enabledPaymentChannels))
+  }
+  if (data.biometricEnabled !== undefined) {
+    fields.push('biometric_enabled = ?')
+    values.push(data.biometricEnabled ? 1 : 0)
   }
 
   fields.push('updated_at = ?')

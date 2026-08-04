@@ -47,7 +47,7 @@ function TypeCard({ title, desc, selected, onPress, c }: CardProps) {
       onPress={onPress}
       activeOpacity={0.7}
       style={{
-        minHeight: 88, borderRadius: 14, padding: 20, borderWidth: 2,
+        minHeight: 90, borderRadius: 14, padding: 20, borderWidth: 2,
         backgroundColor: selected ? orange + '15' : cardBg,
         borderColor: selected ? orange : borderColor,
         flexDirection: 'row', alignItems: 'center',

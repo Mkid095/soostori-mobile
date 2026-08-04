@@ -1,8 +1,9 @@
 // Shared inventory wizard shell — used by both Add and Edit forms
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { View, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme } from '../../hooks/useTheme'
+import { useWizardState } from '../../hooks/useWizardState'
 import type { Category } from '../../lib/types'
 import { BarcodeScannerModal } from '../shared/barcode-scanner-modal'
 import { CategoryPickerModal } from './category-picker-modal'
@@ -13,111 +14,47 @@ import { renderDetailsStep } from './step-details'
 import { renderPricingStep } from './step-pricing'
 import { renderDistributorStep } from './step-distributor'
 import { renderBarcodeStep } from './step-barcode'
-import type { ProductForm, GroupPrice, WizardProps } from './wizard-types'
-import { makeInit } from './wizard-types'
+import type { WizardProps } from './wizard-types'
 
-export function InventoryWizard({ visible, onClose, onSaved, isEdit, initialForm, onSave }: WizardProps) {
+export function InventoryWizard(props: WizardProps) {
+  const { visible, onClose, onSaved, isEdit, initialForm, onSave } = props
   const { bg, card, text, textSecondary: muted, border, brand: orange, success, danger } = useTheme()
-  const [step, setStep] = useState(0)
-  const [form, setForm] = useState<ProductForm>({ ...makeInit(), ...initialForm })
-  const [categories, setCategories] = useState<Category[]>([])
-  const [showCatPicker, setShowCatPicker] = useState(false)
   const [newCatName, setNewCatName] = useState('')
-  const [showScanner, setShowScanner] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const c = { bg, card, text, textSecondary: muted, border, brand: orange, success, danger }
 
-  const loadCategories = useCallback(async () => {
-    const { getAllCategories } = await import('../../services/db-categories')
-    setCategories(await getAllCategories())
-  }, [])
-
-  const open = () => {
-    setForm({ ...makeInit(), ...initialForm })
-    setStep(0)
-    setErrors({})
-    loadCategories()
-  }
-  const close = () => { setForm(makeInit()); setStep(0); setErrors({}); onClose() }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function set(k: string, v: any) {
-    setForm((f) => ({ ...f, [k]: v }))
-  }
-
-  function validate(): boolean {
-    const e: Record<string, string> = {}
-    if (step === 1 && !form.name?.trim()) e.name = 'Required'
-    if (step === 2 && !form.sellingPrice) e.sellingPrice = 'Required'
-    if (step === 2 && !form.costPrice) e.costPrice = 'Required'
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  function next() { if (!validate()) return; setStep((s) => Math.min(s + 1, 4)) }
-  function back() { setStep((s) => Math.max(s - 1, 0)) }
-
-  function addGroupPrice() {
-    setForm((f) => ({ ...f, groupPrices: [...f.groupPrices, { name: '', price: '', minQuantity: '' }] }))
-  }
-  function removeGroupPrice(i: number) {
-    setForm((f) => ({ ...f, groupPrices: f.groupPrices.filter((_, idx) => idx !== i) }))
-  }
-  function updateGroupPrice(i: number, field: keyof GroupPrice, value: string) {
-    setForm((f) => ({
-      ...f,
-      groupPrices: f.groupPrices.map((gp, idx) => idx === i ? { ...gp, [field]: value } : gp),
-    }))
-  }
+  const wizard = useWizardState({ ...props, onClose })
 
   async function addCategory() {
     if (!newCatName.trim()) return
     const { createCategory: cc } = await import('../../services/db-categories')
     const cat = await cc({ name: newCatName.trim(), color: '#f97316', isActive: true })
-    setCategories((cs) => [...cs, cat])
-    setForm((f) => ({ ...f, categoryId: cat.id, categoryName: cat.name, categoryColor: cat.color }))
+    wizard.setForm((f) => ({ ...f, categoryId: cat.id, categoryName: cat.name, categoryColor: cat.color }))
     setNewCatName('')
   }
 
   function selectCategory(cat: Category) {
-    setForm((f) => ({ ...f, categoryId: cat.id, categoryName: cat.name, categoryColor: cat.color }))
+    wizard.setForm((f) => ({ ...f, categoryId: cat.id, categoryName: cat.name, categoryColor: cat.color }))
   }
 
-  function generateBarcode() {
-    setForm((f) => ({ ...f, barcode: `SOO${Date.now()}${Math.floor(Math.random() * 1000)}` }))
-  }
-
-  async function handleSubmit() {
-    if (!form.name?.trim()) { Alert.alert('Required', 'Product name is required'); return }
-    setSaving(true)
-    try {
-      await onSave(form)
-      onSaved()
-      close()
-    } catch {
-      Alert.alert('Error', `Failed to ${isEdit ? 'update' : 'add'} product`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function renderContent(): React.ReactNode {
+  function renderContent() {
+    const { step, form } = wizard
+    const { set } = wizard
     switch (step) {
       case 0: return <>{renderTypeStep({ productType: form.productType, set, c })}</>
       case 1: return <>{renderDetailsStep({
-        form: form as unknown as Record<string, unknown>, set, c, categories,
+        form: form as unknown as Record<string, unknown>, set, c,
+        categories: wizard.categories,
         onSelectCategory: selectCategory,
         onAddCategory: addCategory,
-        errors,
-        onOpenCategoryPicker: () => setShowCatPicker(true),
+        errors: wizard.errors,
+        onOpenCategoryPicker: () => wizard.setShowCatPicker(true),
       })}</>
       case 2: return <>{renderPricingStep({
-        form: form as unknown as Record<string, unknown>, set, c, errors,
-        onAddGroupPrice: addGroupPrice,
-        onRemoveGroupPrice: removeGroupPrice,
-        onUpdateGroupPrice: updateGroupPrice,
+        form: form as unknown as Record<string, unknown>, set, c, errors: wizard.errors,
+        onAddGroupPrice: wizard.addGroupPrice,
+        onRemoveGroupPrice: wizard.removeGroupPrice,
+        onUpdateGroupPrice: wizard.updateGroupPrice,
         isEdit: !!isEdit,
       })}</>
       case 3: return <>{renderDistributorStep({
@@ -125,23 +62,36 @@ export function InventoryWizard({ visible, onClose, onSaved, isEdit, initialForm
       })}</>
       case 4: return <>{renderBarcodeStep({
         form: form as unknown as Record<string, unknown>, set, c,
-        onScan: () => setShowScanner(true),
-        onGenerate: generateBarcode,
+        onScan: () => wizard.setShowScanner(true),
+        onGenerate: wizard.generateBarcode,
         isEdit: !!isEdit,
       })}</>
       default: return null
     }
   }
 
+  async function handleSubmit() {
+    if (!wizard.form.name?.trim()) { Alert.alert('Required', 'Product name is required'); return }
+    wizard.setSaving(true)
+    try {
+      await onSave(wizard.form)
+      onSaved()
+      wizard.close()
+    } catch {
+      wizard.setSaving(false)
+      Alert.alert('Error', `Failed to ${isEdit ? 'update' : 'add'} product`)
+    }
+  }
+
   return (
-    <Modal visible={visible} animationType="slide" onShow={open} onRequestClose={close}>
+    <Modal visible={visible} animationType="slide" onShow={wizard.open} onRequestClose={wizard.close}>
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={{ flex: 1 }}>
           <WizardHeader
-            step={step}
+            step={wizard.step}
             isEdit={!!isEdit}
-            onBack={back}
-            onClose={close}
+            onBack={wizard.back}
+            onClose={wizard.close}
             c={c}
           />
 
@@ -150,11 +100,11 @@ export function InventoryWizard({ visible, onClose, onSaved, isEdit, initialForm
           </View>
 
           <WizardFooter
-            step={step}
+            step={wizard.step}
             isEdit={!!isEdit}
-            saving={saving}
-            onBack={back}
-            onNext={next}
+            saving={wizard.saving}
+            onBack={wizard.back}
+            onNext={wizard.next}
             onSubmit={handleSubmit}
             c={c}
           />
@@ -162,18 +112,21 @@ export function InventoryWizard({ visible, onClose, onSaved, isEdit, initialForm
       </KeyboardAvoidingView>
 
       <BarcodeScannerModal
-        visible={showScanner}
-        onClose={() => setShowScanner(false)}
-        onScan={(code) => { set('barcode', code); setShowScanner(false) }}
+        visible={wizard.showScanner}
+        onClose={() => wizard.setShowScanner(false)}
+        onScan={(code) => { wizard.set('barcode', code); wizard.setShowScanner(false) }}
       />
 
       <CategoryPickerModal
-        visible={showCatPicker}
-        onClose={() => setShowCatPicker(false)}
-        categories={categories}
-        selectedId={form.categoryId}
+        visible={wizard.showCatPicker}
+        onClose={() => wizard.setShowCatPicker(false)}
+        categories={wizard.categories}
+        selectedId={wizard.form.categoryId}
         onSelect={selectCategory}
-        onAddNew={() => { setNewCatName(''); /* open add category flow */ }}
+        onAddNew={(name: string) => {
+          setNewCatName(name)
+          addCategory()
+        }}
       />
     </Modal>
   )

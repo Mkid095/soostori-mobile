@@ -5,6 +5,8 @@ import { useTheme, useAppTheme } from '../../src/hooks/useTheme'
 import { getDb } from '../../src/lib/db'
 import { cacheDirectory, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
+import * as LocalAuthentication from 'expo-local-authentication'
+import { getShopSettings } from '../../src/services/db-settings'
 
 interface PaymentChannels {
   cash: boolean
@@ -35,6 +37,8 @@ export default function SettingsScreen() {
   const [mpesaPaybillNum, setMpesaPaybillNum] = useState('')
   const [mpesaPaybillAcc, setMpesaPaybillAcc] = useState('')
   const [channels, setChannels] = useState<PaymentChannels>(DEFAULT_CHANNELS)
+  const [biometricEnabled, setBiometricEnabled] = useState(false)
+  const [biometricStatus, setBiometricStatus] = useState('Checking...')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -49,11 +53,19 @@ export default function SettingsScreen() {
         setMpesaPhone(row.mpesa_send_money_phone ? String(row.mpesa_send_money_phone) : '')
         setMpesaPaybillNum(row.mpesa_paybill_number ? String(row.mpesa_paybill_number) : '')
         setMpesaPaybillAcc(row.mpesa_paybill_account ? String(row.mpesa_paybill_account) : '')
+        setBiometricEnabled(row.biometric_enabled === 1 || row.biometric_enabled === true)
         try {
           const stored = row.enabled_payment_channels as string | undefined
           if (stored) setChannels(JSON.parse(stored))
         } catch { /* use defaults */ }
       }
+    })
+    // Check biometric hardware status
+    LocalAuthentication.hasHardwareAsync().then((hasHardware) => {
+      if (!hasHardware) { setBiometricStatus('Not available'); return }
+      LocalAuthentication.isEnrolledAsync().then((isEnrolled) => {
+        setBiometricStatus(isEnrolled ? 'Ready' : 'Not enrolled')
+      })
     })
   }, [])
 
@@ -66,11 +78,11 @@ export default function SettingsScreen() {
         `INSERT OR REPLACE INTO shop_settings
           (id, shop_name, address, phone, receipt_footer, receipt_prefix, low_stock_threshold,
            mpesa_send_money_phone, mpesa_paybill_number, mpesa_paybill_account,
-           enabled_payment_channels, updated_at)
-         VALUES ('default', ?, ?, ?, 'INV', ?, ?, ?, ?, ?, ?, ?)`,
+           enabled_payment_channels, biometric_enabled, updated_at)
+         VALUES ('default', ?, ?, ?, 'INV', ?, ?, ?, ?, ?, ?, ?, ?)`,
         [shopName, address, phone, footer, parseInt(lowStock) || 10,
          mpesaPhone, mpesaPaybillNum, mpesaPaybillAcc,
-         JSON.stringify(channels), now]
+         JSON.stringify(channels), biometricEnabled ? 1 : 0, now]
       )
       Alert.alert('Saved', 'Settings updated successfully')
     } catch (e) {
@@ -209,7 +221,36 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Section 5: Payment Channels */}
+        {/* Section 5: Security */}
+        <View style={{ backgroundColor: card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: border }}>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: text, marginBottom: 14 }}>Security</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, color: text, fontWeight: '600' }}>Biometric Authentication</Text>
+              <Text style={{ fontSize: 12, color: textMuted, marginTop: 2 }}>
+                Status: {biometricStatus}
+              </Text>
+            </View>
+            <Switch
+              value={biometricEnabled}
+              onValueChange={(val) => {
+                if (val && biometricStatus !== 'Ready') {
+                  Alert.alert('Unavailable', 'Please enroll fingerprint/face in device settings first.')
+                  return
+                }
+                setBiometricEnabled(val)
+              }}
+              trackColor={{ false: isDark ? '#334155' : '#e2e8f0', true: orange }}
+              thumbColor="#fff"
+              disabled={biometricStatus !== 'Ready'}
+            />
+          </View>
+          <Text style={{ fontSize: 11, color: textMuted, marginTop: 8 }}>
+            Use fingerprint or face recognition to unlock the app
+          </Text>
+        </View>
+
+        {/* Section 6: Payment Channels */}
         <View style={{ backgroundColor: card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: border }}>
           <Text style={{ fontSize: 15, fontWeight: '800', color: text, marginBottom: 4 }}>Payment Channels</Text>
           <Text style={{ fontSize: 11, color: textMuted, marginBottom: 12 }}>Enable or disable payment methods shown at checkout</Text>
@@ -224,7 +265,7 @@ export default function SettingsScreen() {
           <ChannelToggle label="Pochi La Biashara" value={channels.pochila} onToggle={() => toggleChannel('pochila')} />
         </View>
 
-        {/* Section 6: Data Management */}
+        {/* Section 7: Data Management */}
         <View style={{ backgroundColor: card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: border }}>
           <Text style={{ fontSize: 15, fontWeight: '800', color: text, marginBottom: 4 }}>Data Management</Text>
           <Text style={{ fontSize: 11, color: textMuted, marginBottom: 12 }}>Backup or restore all your data</Text>

@@ -160,6 +160,7 @@ export interface ShopSettings {
   mpesaPaybillNumber?: string
   mpesaPaybillAccount?: string
   enabledPaymentChannels?: PaymentChannels
+  biometricEnabled?: boolean
   updatedAt: string
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  Alert, StyleSheet,
+  StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Plus, Package } from 'lucide-react-native'
@@ -15,6 +15,7 @@ import { InventoryEditForm } from '../../src/components/inventory/inventory-edit
 import { RestockPanel } from '../../src/components/inventory/restock-panel'
 import { ProductRow } from '../../src/components/inventory/product-row'
 import { AppHeader } from '../../src/components/shared/app-header'
+import { ConfirmModal } from '../../src/components/shared/confirm-modal'
 
 export default function InventoryScreen() {
   const theme = useTheme()
@@ -28,24 +29,18 @@ export default function InventoryScreen() {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [restocking, setRestocking] = useState<Product | null>(null)
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null)
 
   const loadProducts = useCallback(async () => setProducts(await getAllProducts()), [])
   const loadCategories = useCallback(async () => setCategories(await getAllCategories()), [])
 
   useEffect(() => { loadProducts(); loadCategories() }, [loadProducts, loadCategories])
 
-  async function handleDelete(product: Product) {
-    Alert.alert(
-      'Delete Product',
-      `Are you sure you want to delete "${product.name}"? This will hide it from the inventory.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => { await deleteProduct(product.id); loadProducts() },
-        },
-      ]
-    )
+  const handleDelete = async () => {
+    if (!deletingProduct) return
+    await deleteProduct(deletingProduct.id)
+    loadProducts()
+    setDeletingProduct(null)
   }
 
   const filtered = products.filter((p) => {
@@ -114,7 +109,7 @@ export default function InventoryScreen() {
             theme={theme}
             onEdit={() => setEditing(item)}
             onRestock={() => setRestocking(item)}
-            onDelete={() => handleDelete(item)}
+            onDelete={() => setDeletingProduct(item)}
           />
         )}
         ListEmptyComponent={
@@ -153,6 +148,16 @@ export default function InventoryScreen() {
         product={editing}
         onClose={() => setEditing(null)}
         onSaved={() => { loadProducts(); setEditing(null) }}
+      />
+
+      <ConfirmModal
+        visible={!!deletingProduct}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${deletingProduct?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setDeletingProduct(null)}
+        onConfirm={handleDelete}
       />
     </SafeAreaView>
   )

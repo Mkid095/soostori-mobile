@@ -140,6 +140,7 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       mpesa_paybill_number TEXT,
       mpesa_paybill_account TEXT,
       enabled_payment_channels TEXT,
+      biometric_enabled INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -167,6 +168,13 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
   // Migrate: add enabled_payment_channels column if it doesn't exist (existing installs)
   try {
     await db.execAsync(`ALTER TABLE shop_settings ADD COLUMN enabled_payment_channels TEXT`)
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migrate: add biometric_enabled column if it doesn't exist (existing installs)
+  try {
+    await db.execAsync(`ALTER TABLE shop_settings ADD COLUMN biometric_enabled INTEGER DEFAULT 0`)
   } catch {
     // Column already exists — ignore
   }
