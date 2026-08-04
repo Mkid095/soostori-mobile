@@ -2,6 +2,7 @@
 // Pure presentation: no business logic, no API calls.
 
 import { View, Text, TouchableOpacity, Modal, ScrollView } from 'react-native'
+import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Debt } from '../../lib/types'
 import { formatCurrency, formatDate, formatTime } from '../../lib/utils'
@@ -55,17 +56,22 @@ export function DebtDetailModal({ debt, onClose, onRecordPayment }: Props) {
                   Created {formatDate(debt.createdAt)}
                 </Text>
               </View>
-              <View
-                style={{
-                  backgroundColor: statusColor + '20',
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 8,
-                }}
-              >
-                <Text style={{ color: statusColor, fontWeight: '800', fontSize: 12, textTransform: 'uppercase' }}>
-                  {debt.status}
-                </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View
+                  style={{
+                    backgroundColor: statusColor + '20',
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text style={{ color: statusColor, fontWeight: '800', fontSize: 12, textTransform: 'capitalize' }}>
+                    {debt.status}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={onClose} hitSlop={8}>
+                  <X size={20} color={textMuted} />
+                </TouchableOpacity>
               </View>
             </View>
 

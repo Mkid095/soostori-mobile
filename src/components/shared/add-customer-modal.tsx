@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native'
+import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import { createCustomer } from '../../services/db-customers'
 
@@ -51,7 +52,14 @@ export function AddCustomerModal({ visible, onClose, onCreated }: Props) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}>
         <View style={{ backgroundColor: card, borderRadius: 16, padding: 20 }}>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: text, marginBottom: 4 }}>Add Customer</Text>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: text }}>Add Customer</Text>
+            <TouchableOpacity onPress={handleClose} disabled={loading} hitSlop={8}>
+              <X size={20} color={textMuted} />
+            </TouchableOpacity>
+          </View>
+
           <Text style={{ fontSize: 12, color: textMuted, marginBottom: 16 }}>
             Create a new customer to track their debts
           </Text>
@@ -89,10 +97,10 @@ export function AddCustomerModal({ visible, onClose, onCreated }: Props) {
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
+          <View style={{ gap: 10, marginTop: 20 }}>
             <TouchableOpacity
               style={{
-                flex: 1, borderRadius: 10, paddingVertical: 12,
+                borderRadius: 10, paddingVertical: 14,
                 alignItems: 'center', borderWidth: 1, borderColor: border,
               }}
               onPress={handleClose}
@@ -102,8 +110,8 @@ export function AddCustomerModal({ visible, onClose, onCreated }: Props) {
             </TouchableOpacity>
             <TouchableOpacity
               style={{
-                flex: 1, backgroundColor: success, borderRadius: 10,
-                paddingVertical: 12, alignItems: 'center',
+                backgroundColor: success, borderRadius: 10,
+                paddingVertical: 14, alignItems: 'center',
               }}
               onPress={handleSubmit}
               disabled={loading}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native'
+import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Debt } from '../../lib/types'
 import { recordDebtPayment } from '../../services/db-debts'
@@ -32,7 +33,12 @@ export function DebtPartialPaymentModal({ debt, onClose, onPaid }: Props) {
     <Modal visible={!!debt} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}>
         <View style={{ backgroundColor: card, borderRadius: 16, padding: 20 }}>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: text, marginBottom: 4 }}>Partial Payment</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: text }}>Record Payment</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={8}>
+              <X size={20} color={textMuted} />
+            </TouchableOpacity>
+          </View>
           {debt && (
             <Text style={{ fontSize: 12, color: textMuted, marginBottom: 12 }}>
               {debt.customerName} • Balance: {formatCurrency(debt.amount - debt.amountPaid)}
