@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Biometric Authentication (feat/auth)
+
+**Auth screen** (`app/auth.tsx`):
+- Integrated `expo-local-authentication` for fingerprint/face login
+- Biometric button on PIN keypad — prompts system auth on tap
+- Falls back to PIN on failure or if not set up
+- Status hints: unavailable/not_enrolled/ready/enabled
+
+**Settings screen** (`app/(tabs)/settings.tsx`):
+- Added "Biometric Authentication" toggle in new Security section
+- Shows hardware status: Not available / Not enrolled / Ready
+- Saves `biometric_enabled` to `shop_settings` table
+
+**Database/Types**:
+- `src/lib/types.ts` — Added `biometricEnabled?: boolean` to `ShopSettings`
+- `src/lib/db-schema.ts` — Added `biometric_enabled INTEGER DEFAULT 0` column with migration
+- `src/services/db-settings.ts` — Read/write `biometricEnabled` field
+
+**Delete confirmation**:
+- `src/components/shared/confirm-modal.tsx` — New reusable modal with Cancel/Delete buttons
+- `app/(tabs)/inventory.tsx` — Uses `ConfirmModal` instead of `Alert.alert` for delete
+
+**New components**:
+- `src/components/auth/pin-keypad.tsx` — Extracted keypad with biometric button
+- `src/components/settings/security-section.tsx` — Security/biometric toggle UI
+- `src/components/settings/payment-channels-section.tsx` — Payment method toggles
+- `src/components/settings/data-management-section.tsx` — Export/import backup
+- `src/components/settings/shop-details-form.tsx` — Shop details fields
+- `src/components/settings/mpsesa-config.tsx` — M-Pesa config fields
+- `src/components/settings/appearance-section.tsx` — Dark mode toggle
+- `src/components/inventory/inventory-search-bar.tsx` — Search, category chips, add button
+- `src/components/inventory/inventory-product-list.tsx` — Product FlatList with empty state
+
 ### Teammate Merge — All Pages Updated
 
 **POS (teammate merged)**:
