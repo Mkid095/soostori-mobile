@@ -2,48 +2,54 @@
 import { View, Text, TextInput, TouchableOpacity } from 'react-native'
 import { Camera } from 'lucide-react-native'
 
-const baseInput = { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, borderWidth: 1 }
-
 interface Props {
-  form: Record<string, any>
-  set: (k: string, v: any) => void
-  c: any
+  form: Record<string, unknown>
+  set: (k: string, v: unknown) => void
+  c: Record<string, string>
   onScan: () => void
   onGenerate: () => void
   isEdit: boolean
 }
 
+function inputStyle(c: Record<string, string>) {
+  return {
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, borderWidth: 1,
+    backgroundColor: c.card, color: c.text, borderColor: c.border,
+  }
+}
+
 export function renderBarcodeStep({ form, set, c, onScan, onGenerate, isEdit }: Props) {
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: 16 }}>
       <Text style={{ fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 4 }}>
         Barcode (Optional)
       </Text>
-      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <TextInput
-          style={{ ...baseInput, flex: 1, backgroundColor: c.card, color: c.text, borderColor: c.border }}
+          style={{ ...inputStyle(c), flex: 1 }}
           placeholder="Enter or scan barcode"
           placeholderTextColor={c.textSecondary}
-          value={form.barcode || ''}
+          value={(form.barcode as string) || ''}
           onChangeText={(v) => set('barcode', v)}
         />
         <TouchableOpacity
-          style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: c.brand, justifyContent: 'center', alignItems: 'center' }}
+          style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: c.brand, justifyContent: 'center', alignItems: 'center' }}
           onPress={onScan}
         >
-          <Camera size={20} color="#fff" />
+          <Camera size={22} color="#fff" />
         </TouchableOpacity>
       </View>
       <TouchableOpacity
-        style={{ backgroundColor: c.card, borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: c.border }}
+        style={{ backgroundColor: c.card, borderRadius: 10, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: c.border }}
         onPress={onGenerate}
       >
         <Text style={{ color: c.brand, fontWeight: '700', fontSize: 14 }}>Generate Barcode</Text>
       </TouchableOpacity>
-      {form.barcode && (
-        <View style={{ backgroundColor: c.card, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: c.success }}>
+      {!!form.barcode && (
+        <View style={{ backgroundColor: c.card, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: c.success }}>
           <Text style={{ color: c.success, fontSize: 13, fontWeight: '700' }}>
-            {isEdit ? 'Barcode:' : 'Generated:'} {form.barcode}
+            {isEdit ? 'Barcode:' : 'Generated:'} {String(form.barcode)}
           </Text>
         </View>
       )}
