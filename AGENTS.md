@@ -33,6 +33,9 @@ Required updates — every time, without exception:
 - Comment out code instead of deleting — **delete it**
 - Add commented-out code as "future reference" — **never**
 
+- **No sparkle icon (✨ or `<Sparkles>`) anywhere in UI** — canonical AI tell, strictly forbidden
+- **No AI-tell icons** (stars ★, magic wand, robot, brain, lightning bolt) — use Lucide or no icon
+
 ### Always do these:
 
 - Follow `[domain]-[action]-type.ts` naming
