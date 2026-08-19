@@ -33,8 +33,7 @@ Required updates — every time, without exception:
 - Comment out code instead of deleting — **delete it**
 - Add commented-out code as "future reference" — **never**
 
-- **No sparkle icon (✨ or `<Sparkles>`) anywhere in UI** — canonical AI tell, strictly forbidden
-- **No AI-tell icons** (stars ★, magic wand, robot, brain, lightning bolt) — use Lucide or no icon
+- **No AI visual vocabulary** in UI: no sparkle (✨, `<Sparkles>`), no magic wand (🪄, `<Wand>`), no brain (🧠), no robot (🤖), no orb, no lightning-as-decoration, no neural nodes, no purple/violet gradient backgrounds, no glassmorphism, no pulsing glow/shimmer. Use Lucide icons. Reserve ✨ ONLY for actual AI features, not every action.
 
 ### Always do these:
 

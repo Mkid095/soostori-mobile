@@ -30,7 +30,7 @@ A mobile POS app for shop attendants. Works completely offline — no internet r
 | Business logic | **NEVER** in React components | Only in `src/lib/` or `src/services/` |
 | UI components | NEVER contain API calls, validation, or business logic | Only rendering + event emission |
 | Generic utilities | **FORBIDDEN** | helpers.ts, common.ts, misc.ts, tools.ts do not exist |
-| **No sparkle icon** | **Strictly forbidden** (✨, `<Sparkles>`, stars ★, magic wand, robot, brain, lightning bolt) — use Lucide or no icon |
+| **No AI visual vocabulary** | **Strictly forbidden** — no sparkle (✨), magic wand (🪄), brain (🧠), robot (🤖), orb, lightning-as-decoration, neural nodes, purple/violet gradient backgrounds, glassmorphism, pulsing glow. Use Lucide icons. Reserve ✨ ONLY for actual AI features. |
 | TypeScript | Strict — no `any`, no implicit `any` | `npx tsc --noEmit` must pass |
 | CHANGELOG.md | **UPDATE ON EVERY COMMIT** | Every change documented |
 
