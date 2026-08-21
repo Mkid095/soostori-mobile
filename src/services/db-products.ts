@@ -2,7 +2,7 @@
 
 import { getDb } from '../lib/db'
 import type { Product } from '../lib/types'
-import { generateId } from '../lib/utils'
+import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapProductRow } from './db-products-mapper'
 

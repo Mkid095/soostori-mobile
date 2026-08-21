@@ -6,10 +6,29 @@ import { initSchema } from './db-schema'
 
 let db: SQLite.SQLiteDatabase | null = null
 
+async function addColumnIfNotExists(
+  database: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  type: string,
+): Promise<void> {
+  try {
+    await database.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  } catch (e) {
+    // Column already exists — ignore
+    if (String(e).includes('duplicate column')) return
+    throw e
+  }
+}
+
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db
   db = await SQLite.openDatabaseAsync('soostori.db')
   await initSchema(db)
+  // Migration: add new columns if they don't exist (safe to call on every launch)
+  await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_number', 'TEXT')
+  await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_account', 'TEXT')
+  await addColumnIfNotExists(db, 'shop_settings', 'mpesa_pochi_phone', 'TEXT')
   return db
 }
 

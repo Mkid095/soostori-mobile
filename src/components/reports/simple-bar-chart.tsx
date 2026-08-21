@@ -3,7 +3,7 @@
 
 import { View, Text } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 import { Banknote, Smartphone, AlertCircle, Receipt } from 'lucide-react-native'
 
 interface ChartItem {
@@ -18,34 +18,38 @@ interface Props {
 }
 
 function getPaymentIcon(method: string, color: string) {
+
   if (method === 'cash') return <Banknote size={14} color={color} />
+
   if (method === 'mpesa' || method === 'mobile_money') return <Smartphone size={14} color={color} />
+
   if (method === 'debt') return <AlertCircle size={14} color={color} />
+
   return <Receipt size={14} color={color} />
 }
 
 export function SimpleBarChart({ data, maxValue }: Props) {
-  const { card, border, isDark } = useTheme()
+  const { card, border, text, textSecondary } = useTheme()
   if (data.length === 0 || maxValue === 0) return null
 
   return (
     <View style={[styles.card, { backgroundColor: card, borderColor: border }]}>
-      <Text style={[styles.title, { color: isDark ? '#F1F5F9' : '#0F172A' }]}>
+      <Text style={[styles.title, { color: text }]}>
         Revenue by Payment Method
       </Text>
       {data.map((item) => (
         <View key={item.label} style={styles.row}>
           <View style={styles.labelWrap}>
             {getPaymentIcon(item.label.toLowerCase().replace(' ', '_'), item.color)}
-            <Text style={[styles.label, { color: isDark ? '#F1F5F9' : '#0F172A' }]}>
+            <Text style={[styles.label, { color: text }]}>
               {item.label}
             </Text>
           </View>
           <View style={styles.barWrap}>
-            <View style={[styles.barBg, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
+            <View style={[styles.barBg, { backgroundColor: card }]}>
               <View style={[styles.bar, { width: `${(item.value / maxValue) * 100}%`, backgroundColor: item.color }]} />
             </View>
-            <Text style={[styles.value, { color: isDark ? '#CBD5E1' : '#475569' }]}>
+            <Text style={[styles.value, { color: textSecondary }]}>
               {formatCurrency(item.value)}
             </Text>
           </View>

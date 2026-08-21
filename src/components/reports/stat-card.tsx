@@ -3,7 +3,7 @@
 
 import { View, Text } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   label: string

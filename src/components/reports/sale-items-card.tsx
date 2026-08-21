@@ -4,7 +4,7 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { SaleItem } from '../../lib/types'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   items: SaleItem[]

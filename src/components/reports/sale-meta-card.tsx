@@ -4,7 +4,7 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Sale } from '../../lib/types'
-import { formatDate, formatTime } from '../../lib/utils'
+import { formatDate, formatTime } from '../../lib/formatters'
 import { PaymentBadge } from './payment-badge'
 
 interface Props {

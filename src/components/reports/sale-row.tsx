@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity } from 'react-native'
 import { ChevronRight, Banknote, Smartphone, AlertCircle, Receipt } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Sale } from '../../lib/types'
-import { formatCurrency, formatDate, formatTime } from '../../lib/utils'
+import { formatCurrency, formatDate, formatTime } from '../../lib/formatters'
 
 const PAYMENT_COLOR: Record<string, string> = {
   cash: '#22C55E',
@@ -22,9 +22,13 @@ const PAYMENT_LABEL: Record<string, string> = {
 }
 
 function getPaymentIcon(method: string, color: string) {
+
   if (method === 'cash') return <Banknote size={14} color={color} />
+
   if (method === 'mpesa' || method === 'mobile_money') return <Smartphone size={14} color={color} />
+
   if (method === 'debt') return <AlertCircle size={14} color={color} />
+
   return <Receipt size={14} color={color} />
 }
 
@@ -58,6 +62,7 @@ export function SaleRow({ sale, onPress }: Props) {
       <View style={styles.right}>
         <Text style={[styles.date, { color: textMuted }]}>{formatDate(sale.createdAt)}</Text>
         <Text style={[styles.time, { color: textMuted }]}>{formatTime(sale.createdAt)}</Text>
+
         <ChevronRight size={14} color="#94A3B8" />
       </View>
     </TouchableOpacity>

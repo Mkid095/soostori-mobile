@@ -1,7 +1,7 @@
 // Cash payment panel for PosCheckoutModal
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   amountTendered: string

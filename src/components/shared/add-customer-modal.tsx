@@ -56,6 +56,7 @@ export function AddCustomerModal({ visible, onClose, onCreated }: Props) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 18, fontWeight: '800', color: text }}>Add Customer</Text>
             <TouchableOpacity onPress={handleClose} disabled={loading} hitSlop={8}>
+
               <X size={20} color={textMuted} />
             </TouchableOpacity>
           </View>

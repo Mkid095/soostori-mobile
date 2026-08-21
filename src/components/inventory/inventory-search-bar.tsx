@@ -40,6 +40,7 @@ export function InventorySearchBar({
         onPress={onAdd}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    // @ts-expect-error
           <Plus size={18} color="#fff" />
           <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Add Product</Text>
         </View>

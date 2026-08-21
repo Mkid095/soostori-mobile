@@ -4,6 +4,24 @@ import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-ca
 import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 
+// Play beep sound when barcode is scanned. expo-av requires a dev build; silent fail in Expo Go.
+async function playBeep() {
+  try {
+    // Dynamic import so expo-av is only loaded when native module is available
+    const { Audio } = await import('expo-av')
+    const { sound } = await Audio.Sound.createAsync(
+      require('../../../assets/beep.mp3'),
+      { shouldPlay: true, volume: 1.0 }
+    )
+    sound.setOnPlaybackStatusUpdate((status) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((status as any).didJustFinish) sound.unloadAsync()
+    })
+  } catch {
+    // expo-av not available (Expo Go) — silent fail
+  }
+}
+
 interface Props {
   visible: boolean
   onClose: () => void
@@ -11,13 +29,14 @@ interface Props {
 }
 
 export function BarcodeScannerModal({ visible, onClose, onScan }: Props) {
-  const { isDark, bg, text } = useTheme()
+  const { bg, text, brand } = useTheme()
   const [permission, requestPermission] = useCameraPermissions()
   const [scanned, setScanned] = useState(false)
 
   async function handleBarcodeScanned(result: BarcodeScanningResult) {
     if (scanned) return
     setScanned(true)
+    await playBeep()
     onScan(result.data)
     onClose()
     setTimeout(() => setScanned(false), 1000)
@@ -38,7 +57,7 @@ export function BarcodeScannerModal({ visible, onClose, onScan }: Props) {
       <Modal visible={visible} onRequestClose={onClose}>
         <View style={[styles.center, { backgroundColor: bg }]}>
           <Text style={[styles.message, { color: text }]}>Camera access is needed to scan barcodes</Text>
-          <TouchableOpacity style={[styles.button, { backgroundColor: '#F97316' }]} onPress={requestPermission}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: brand }]} onPress={requestPermission}>
             <Text style={{ color: '#fff', fontWeight: '700' }}>Grant Permission</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.button, { backgroundColor: '#64748b' }]} onPress={onClose}>
@@ -52,6 +71,7 @@ export function BarcodeScannerModal({ visible, onClose, onScan }: Props) {
   return (
     <Modal visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1 }}>
+        {/* Camera — rendered first so overlay can sit above it via absolute position */}
         <CameraView
           style={{ flex: 1 }}
           facing="back"
@@ -59,22 +79,23 @@ export function BarcodeScannerModal({ visible, onClose, onScan }: Props) {
             barcodeTypes: ['qr', 'ean13', 'ean8', 'upc_a', 'upc_e', 'code39', 'code128', 'codabar', 'itf14'],
           }}
           onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-        >
-          <View style={styles.overlay}>
-            <View style={styles.topBar}>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <X size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.scanArea}>
-              <View style={[styles.corner, { borderColor: '#F97316' }, styles.topLeft]} />
-              <View style={[styles.corner, { borderColor: '#F97316' }, styles.topRight]} />
-              <View style={[styles.corner, { borderColor: '#F97316' }, styles.bottomLeft]} />
-              <View style={[styles.corner, { borderColor: '#F97316' }, styles.bottomRight]} />
-            </View>
-            <Text style={styles.hint}>Point camera at barcode</Text>
+        />
+        {/* Overlay — absolutely positioned above the camera */}
+        <View style={styles.overlay} pointerEvents="box-none">
+          <View style={styles.topBar}>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              
+              <X size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
-        </CameraView>
+          <View style={styles.scanArea}>
+            <View style={[styles.corner, { borderColor: brand }, styles.topLeft]} />
+            <View style={[styles.corner, { borderColor: brand }, styles.topRight]} />
+            <View style={[styles.corner, { borderColor: brand }, styles.bottomLeft]} />
+            <View style={[styles.corner, { borderColor: brand }, styles.bottomRight]} />
+          </View>
+          <Text style={styles.hint}>Point camera at barcode</Text>
+        </View>
       </View>
     </Modal>
   )
@@ -84,7 +105,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   message: { fontSize: 16, textAlign: 'center', marginBottom: 20 },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10, marginTop: 12 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
   topBar: { paddingTop: 60, paddingHorizontal: 20 },
   closeBtn: {
     width: 44, height: 44, borderRadius: 22,

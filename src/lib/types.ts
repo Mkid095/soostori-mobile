@@ -159,6 +159,9 @@ export interface ShopSettings {
   mpesaSendMoneyPhone?: string
   mpesaPaybillNumber?: string
   mpesaPaybillAccount?: string
+  bankPaybillNumber?: string
+  bankPaybillAccount?: string
+  mpesaPochiPhone?: string
   enabledPaymentChannels?: PaymentChannels
   biometricEnabled?: boolean
   updatedAt: string

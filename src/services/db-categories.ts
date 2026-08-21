@@ -2,7 +2,7 @@
 
 import { getDb } from '../lib/db'
 import type { Category } from '../lib/types'
-import { generateId } from '../lib/utils'
+import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 
 export async function getAllCategories(): Promise<Category[]> {

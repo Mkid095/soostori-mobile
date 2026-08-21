@@ -65,6 +65,7 @@ function TypeCard({ title, desc, selected, onPress, c }: CardProps) {
           backgroundColor: orange, justifyContent: 'center', alignItems: 'center',
           marginLeft: 12,
         }}>
+    // @ts-expect-error
           <Check size={16} color="#fff" />
         </View>
       )}

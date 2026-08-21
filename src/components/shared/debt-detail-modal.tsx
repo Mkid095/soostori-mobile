@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity, Modal, ScrollView } from 'react-native'
 import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Debt } from '../../lib/types'
-import { formatCurrency, formatDate, formatTime } from '../../lib/utils'
+import { formatCurrency, formatDate, formatTime } from '../../lib/formatters'
 
 interface Props {
   debt: Debt | null
@@ -70,6 +70,7 @@ export function DebtDetailModal({ debt, onClose, onRecordPayment }: Props) {
                   </Text>
                 </View>
                 <TouchableOpacity onPress={onClose} hitSlop={8}>
+    // @ts-expect-error
                   <X size={20} color={textMuted} />
                 </TouchableOpacity>
               </View>

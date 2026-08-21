@@ -70,8 +70,10 @@ export function AppHeader({ title, showSync = true, showToggle = true, showSetti
             activeOpacity={0.7}
           >
             {syncLoading ? (
+
               <RefreshCw size={17} color={text} style={{ opacity: 0.6 }} />
             ) : (
+
               <Database size={17} color={pendingSync > 0 ? brand : text} />
             )}
             {pendingSync > 0 && (
@@ -89,7 +91,9 @@ export function AppHeader({ title, showSync = true, showToggle = true, showSetti
             activeOpacity={0.7}
           >
             {effectiveScheme === 'dark'
+
               ? <Sun size={17} color={text} />
+
               : <Moon size={17} color={text} />}
           </TouchableOpacity>
         )}
@@ -100,6 +104,7 @@ export function AppHeader({ title, showSync = true, showToggle = true, showSetti
             onPress={() => router.push('/(tabs)/settings')}
             activeOpacity={0.7}
           >
+
             <Settings size={17} color={text} />
           </TouchableOpacity>
         )}

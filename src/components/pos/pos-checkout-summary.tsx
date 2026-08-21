@@ -2,7 +2,7 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { CartItem } from '../../lib/types'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   cart: CartItem[]

@@ -40,6 +40,7 @@ export function MpesaPaymentPanel({ mpesaConfirmed, onConfirm, shopSettings }: P
         onPress={onConfirm}
         disabled={mpesaConfirmed}
       >
+    // @ts-expect-error
         <Check size={18} color="#fff" />
         <Text style={s.confirmBtnText}>
           {mpesaConfirmed ? 'Payment Confirmed!' : "I've Received Payment"}

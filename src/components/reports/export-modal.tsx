@@ -49,9 +49,11 @@ export function ExportModal({ sales, visible, onClose }: Props) {
       <View style={[styles.container, { backgroundColor: bg }]}>
         <View style={[styles.header, { borderBottomColor: border }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
             <FileText size={20} color={brand} />
             <Text style={[styles.title, { color: text }]}>Export Report</Text>
           </View>
+
           <TouchableOpacity onPress={onClose}><X size={20} color={text} /></TouchableOpacity>
         </View>
 
@@ -67,6 +69,7 @@ export function ExportModal({ sales, visible, onClose }: Props) {
                   { borderColor: border, backgroundColor: period === p ? `${periodColors[p]}15` : 'transparent' },
                 ]}
               >
+
                 <Calendar size={14} color={period === p ? periodColors[p] : '#94A3B8'} />
                 <Text style={[styles.periodBtnText, { color: period === p ? periodColors[p] : text }]}>
                   {periodLabel(p)}
@@ -97,6 +100,7 @@ export function ExportModal({ sales, visible, onClose }: Props) {
 
         <View style={[styles.footer, { borderTopColor: border }]}>
           <TouchableOpacity style={[styles.exportBtn, { backgroundColor: brand }]} onPress={handleExport}>
+
             <Download size={16} color="#fff" />
             <Text style={styles.exportBtnText}>Export {format.toUpperCase()}</Text>
           </TouchableOpacity>

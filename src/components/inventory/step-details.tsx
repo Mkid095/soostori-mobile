@@ -1,6 +1,7 @@
-// Step 1: Product details (name, SKU, category, unit)
-import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native'
-import { Camera, ChevronDown, Plus } from 'lucide-react-native'
+// Step 1: Product details (name, SKU, category, unit, image)
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
+import { Camera, ChevronDown, Plus, Image } from 'lucide-react-native'
+import * as ImagePicker from 'expo-image-picker'
 import type { Category } from '../../lib/types'
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
   c: Record<string, string>
   categories: Category[]
   onSelectCategory: (cat: Category) => void
-  onAddCategory: (name: string) => void
+  onAddCategory: () => void
   errors: Record<string, string>
   onOpenCategoryPicker: () => void
   onOpenUnitPicker: () => void
@@ -24,13 +25,57 @@ function inputStyle(c: Record<string, string>, hasError?: boolean) {
 }
 
 export function renderDetailsStep({
-  form, set, c, categories, onSelectCategory, onAddCategory,
+  form, set, c, categories, onAddCategory,
   errors, onOpenCategoryPicker, onOpenUnitPicker,
 }: Props) {
   const selectedCat = categories.find((cat) => cat.id === form.categoryId)
 
+  async function pickImage() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library.')
+      return
+    }
+    Alert.alert('Add Image', 'Choose an option', [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const cam = await ImagePicker.requestCameraPermissionsAsync()
+          if (!cam.granted) {
+            Alert.alert('Permission Required', 'Please allow camera access.')
+            return
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+          })
+          if (!result.canceled && result.assets[0]) {
+            set('imageUrl', result.assets[0].uri)
+          }
+        },
+      },
+      {
+        text: 'Choose from Gallery',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+          })
+          if (!result.canceled && result.assets[0]) {
+            set('imageUrl', result.assets[0].uri)
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }
+
   return (
-    <ScrollView style={{ gap: 16 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ gap: 16, paddingVertical: 4 }} showsVerticalScrollIndicator={false}>
       {/* Product Name */}
       <View>
         <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Product Name *</Text>
@@ -56,13 +101,24 @@ export function renderDetailsStep({
         />
       </View>
 
-      {/* Image placeholder */}
-      <TouchableOpacity style={{
-        borderRadius: 10, borderWidth: 1, borderColor: c.border, borderStyle: 'dashed',
-        paddingVertical: 24, alignItems: 'center', backgroundColor: c.card,
-      }}>
-        <Camera size={28} color={c.textSecondary} />
-        <Text style={{ color: c.textSecondary, fontSize: 13, marginTop: 6 }}>Tap to add image (optional)</Text>
+      {/* Image */}
+      <TouchableOpacity
+        onPress={pickImage}
+        style={{
+          borderRadius: 10, borderWidth: 1, borderColor: c.border, borderStyle: 'dashed',
+          paddingVertical: 24, alignItems: 'center', backgroundColor: c.card,
+        }}
+      >
+        {(form.imageUrl as string) ? (
+
+          <Image size={28} color={c.textSecondary} />
+        ) : (
+
+          <Camera size={28} color={c.textSecondary} />
+        )}
+        <Text style={{ color: c.textSecondary, fontSize: 13, marginTop: 6 }}>
+          {(form.imageUrl as string) ? 'Change image' : 'Tap to add image (optional)'}
+        </Text>
       </TouchableOpacity>
 
       {/* Category */}
@@ -85,16 +141,18 @@ export function renderDetailsStep({
             ) : (
               <Text style={{ color: c.textSecondary }}>Select category</Text>
             )}
+            
             <ChevronDown size={18} color={c.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={onOpenCategoryPicker}
+            onPress={onAddCategory}
             style={{
               width: 48, height: 48, borderRadius: 10,
               backgroundColor: c.brand, justifyContent: 'center', alignItems: 'center',
             }}
           >
-            <Plus size={20} color="#fff" />
+            
+            <Plus size={20} color={c.card} />
           </TouchableOpacity>
         </View>
       </View>
@@ -112,6 +170,7 @@ export function renderDetailsStep({
           <Text style={{ color: form.unit ? c.text : c.textSecondary, textTransform: 'capitalize' }}>
             {(form.unit as string) || 'Select unit'}
           </Text>
+          
           <ChevronDown size={18} color={c.textSecondary} />
         </TouchableOpacity>
       </View>

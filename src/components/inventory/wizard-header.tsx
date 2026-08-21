@@ -29,7 +29,9 @@ export function WizardHeader({ step, isEdit, onBack, onClose, c }: Props) {
             style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' }}
           >
             {step > 0
+
               ? <ChevronLeft size={20} color={text} />
+
               : <X size={20} color={text} />}
           </TouchableOpacity>
           <Text style={{ fontSize: 17, fontWeight: '800', color: text }}>

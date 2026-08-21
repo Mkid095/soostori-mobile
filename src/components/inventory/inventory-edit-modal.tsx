@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme } from '../../hooks/useTheme'
 import type { Product } from '../../lib/types'
 import { updateProduct } from '../../services/db-products'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   product: Product | null

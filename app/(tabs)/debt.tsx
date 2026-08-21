@@ -12,7 +12,7 @@ import { useTheme } from '../../src/hooks/useTheme'
 import type { Debt, Customer } from '../../src/lib/types'
 import { getAllDebts, getDebtById } from '../../src/services/db-debts'
 import { getAllCustomers } from '../../src/services/db-customers'
-import { formatCurrency, formatDate } from '../../src/lib/utils'
+import { formatCurrency, formatDate } from '../../src/lib/formatters'
 import { DebtPartialPaymentModal } from '../../src/components/shared/debt-partial-payment-modal'
 import { DebtDetailModal } from '../../src/components/shared/debt-detail-modal'
 import { AddCustomerModal } from '../../src/components/shared/add-customer-modal'
@@ -71,7 +71,7 @@ function DebtCard({ debt, onPress, onRecordPayment }: DebtCardProps) {
             </Text>
           </View>
           {/* Progress bar */}
-          <View style={{ marginTop: 10, height: 6, borderRadius: 3, backgroundColor: isDark ? '#0F172A' : '#E2E8F0', overflow: 'hidden' }}>
+          <View style={{ marginTop: 10, height: 6, borderRadius: 3, backgroundColor: border, overflow: 'hidden' }}>
             <View style={{ height: '100%', width: `${paidPercent}%`, backgroundColor: statusColor, borderRadius: 3 }} />
           </View>
         </View>
@@ -200,6 +200,7 @@ function DebtsTab({
       {/* Search */}
       <View style={{ padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: border, backgroundColor: card }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
           <Search size={16} color={textMuted} />
           <TextInput
             style={{
@@ -247,7 +248,7 @@ function DebtsTab({
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 88 }}
         renderItem={({ item }) => (
           <DebtCard
             debt={item}
@@ -257,6 +258,7 @@ function DebtsTab({
         )}
         ListEmptyComponent={
           <View style={{ padding: 60, alignItems: 'center', gap: 12 }}>
+
             <FileText size={40} color={textMuted} />
             <Text style={{ color: textMuted, fontSize: 14 }}>No debts found</Text>
           </View>
@@ -323,7 +325,7 @@ function CustomersTab({
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 88 }}
         renderItem={({ item }) => (
           <CustomerRow customer={item} onRecordDebt={onRecordDebt} />
         )}

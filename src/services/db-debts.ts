@@ -2,7 +2,7 @@
 
 import { getDb } from '../lib/db'
 import type { Debt, DebtPayment } from '../lib/types'
-import { generateId } from '../lib/utils'
+import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 
 export async function getTotalDebtCollected(): Promise<number> {

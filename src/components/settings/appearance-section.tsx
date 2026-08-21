@@ -24,7 +24,7 @@ export function AppearanceSection({ isDark, effectiveScheme, onToggle, orange }:
         <Switch
           value={effectiveScheme === 'dark'}
           onValueChange={onToggle}
-          trackColor={{ false: isDark ? '#334155' : '#e2e8f0', true: orange }}
+          trackColor={{ false: isDark ? '#334155' : border, true: orange }}
           thumbColor="#fff"
         />
       </View>

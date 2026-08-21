@@ -44,6 +44,7 @@ export function ReceiptView({ receipt, onClose }: Props) {
     <View style={[styles.container, { backgroundColor: card }]}>
       <View style={[styles.header, { borderBottomColor: border }]}>
         <Text style={[styles.title, { color: text }]}>Receipt</Text>
+
         <TouchableOpacity onPress={onClose}><X size={20} color={text} /></TouchableOpacity>
       </View>
 
@@ -76,10 +77,12 @@ export function ReceiptView({ receipt, onClose }: Props) {
 
       <View style={[styles.actions, { borderTopColor: border }]}>
         <TouchableOpacity style={[styles.btn, { backgroundColor: border }]} onPress={handleShare} disabled={printing}>
+
           <Share2 size={18} color={text} />
           <Text style={[styles.btnText, { color: text }]}>Share</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, { backgroundColor: brand }]} onPress={handlePrint} disabled={printing}>
+
           <Printer size={18} color="#fff" />
           <Text style={[styles.btnText, { color: '#fff' }]}>{printing ? 'Printing...' : 'Print'}</Text>
         </TouchableOpacity>

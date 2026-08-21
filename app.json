@@ -9,7 +9,13 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.soostori.pos"
+      "bundleIdentifier": "com.soostori.pos",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Soostori POS needs Bluetooth to discover barcode scanners and receipt printers.",
+        "NSBluetoothPeripheralUsageDescription": "Soostori POS needs Bluetooth to discover barcode scanners and receipt printers.",
+        "NSLocalNetworkUsageDescription": "Soostori POS needs local network access to discover WiFi receipt printers.",
+        "NSBonjourServices": ["_pdl-datastream._tcp", "_printer._tcp", "_ipp._tcp", "_scanner._tcp"]
+      }
     },
     "android": {
       "package": "com.soostori.pos",

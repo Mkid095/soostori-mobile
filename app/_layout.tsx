@@ -9,8 +9,6 @@ import { getDb } from '../src/lib/db'
 import { getQueryClient } from '../src/lib/query-client'
 import { ThemeProvider } from '../src/hooks/useTheme'
 import { MenuProvider } from '../src/hooks/MenuContext'
-import { AppMenu } from '../src/components/shared/app-menu'
-
 const FIRST_RUN_KEY = '@soostori:firstRun'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
@@ -65,7 +63,6 @@ export default function RootLayout() {
             )}
             <Stack.Screen name="(tabs)" />
           </Stack>
-          <AppMenu />
         </MenuProvider>
       </ThemeProvider>
     </QueryClientProvider>

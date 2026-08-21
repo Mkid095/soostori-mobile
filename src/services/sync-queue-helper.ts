@@ -1,7 +1,7 @@
 // Sync queue helper — insert into sync_queue table for future backend sync
 
 import { getDb } from '../lib/db'
-import { generateId } from '../lib/utils'
+import { generateId } from '../lib/formatters'
 
 export async function queueSync(
   tableName: string,

@@ -36,6 +36,9 @@ export async function getShopSettings(): Promise<ShopSettings | null> {
     mpesaSendMoneyPhone: row.mpesa_send_money_phone ? String(row.mpesa_send_money_phone) : undefined,
     mpesaPaybillNumber: row.mpesa_paybill_number ? String(row.mpesa_paybill_number) : undefined,
     mpesaPaybillAccount: row.mpesa_paybill_account ? String(row.mpesa_paybill_account) : undefined,
+    bankPaybillNumber: row.bank_paybill_number ? String(row.bank_paybill_number) : undefined,
+    bankPaybillAccount: row.bank_paybill_account ? String(row.bank_paybill_account) : undefined,
+    mpesaPochiPhone: row.mpesa_pochi_phone ? String(row.mpesa_pochi_phone) : undefined,
     enabledPaymentChannels: channels,
     biometricEnabled: row.biometric_enabled === 1 || row.biometric_enabled === true,
     updatedAt: String(row.updated_at || ''),
@@ -59,6 +62,9 @@ export async function updateShopSettings(data: Partial<ShopSettings>): Promise<v
   if (data.mpesaSendMoneyPhone !== undefined) { fields.push('mpesa_send_money_phone = ?'); values.push(data.mpesaSendMoneyPhone) }
   if (data.mpesaPaybillNumber !== undefined) { fields.push('mpesa_paybill_number = ?'); values.push(data.mpesaPaybillNumber) }
   if (data.mpesaPaybillAccount !== undefined) { fields.push('mpesa_paybill_account = ?'); values.push(data.mpesaPaybillAccount) }
+  if (data.bankPaybillNumber !== undefined) { fields.push('bank_paybill_number = ?'); values.push(data.bankPaybillNumber) }
+  if (data.bankPaybillAccount !== undefined) { fields.push('bank_paybill_account = ?'); values.push(data.bankPaybillAccount) }
+  if (data.mpesaPochiPhone !== undefined) { fields.push('mpesa_pochi_phone = ?'); values.push(data.mpesaPochiPhone) }
   if (data.enabledPaymentChannels !== undefined) {
     fields.push('enabled_payment_channels = ?')
     values.push(JSON.stringify(data.enabledPaymentChannels))

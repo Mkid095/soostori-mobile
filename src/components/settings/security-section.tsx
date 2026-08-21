@@ -30,7 +30,7 @@ export function SecuritySection({ biometricEnabled, biometricStatus, onToggle }:
             }
             onToggle(val)
           }}
-          trackColor={{ false: isDark ? '#334155' : '#e2e8f0', true: orange }}
+          trackColor={{ false: isDark ? '#334155' : border, true: orange }}
           thumbColor="#fff"
           disabled={biometricStatus !== 'Ready'}
         />

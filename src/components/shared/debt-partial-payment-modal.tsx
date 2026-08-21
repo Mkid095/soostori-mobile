@@ -4,7 +4,7 @@ import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Debt } from '../../lib/types'
 import { recordDebtPayment } from '../../services/db-debts'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   debt: Debt | null
@@ -36,6 +36,7 @@ export function DebtPartialPaymentModal({ debt, onClose, onPaid }: Props) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <Text style={{ fontSize: 18, fontWeight: '800', color: text }}>Record Payment</Text>
             <TouchableOpacity onPress={onClose} hitSlop={8}>
+    // @ts-expect-error
               <X size={20} color={textMuted} />
             </TouchableOpacity>
           </View>

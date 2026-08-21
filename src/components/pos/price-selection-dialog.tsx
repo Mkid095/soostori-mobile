@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native'
 import { X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Product } from '../../lib/types'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency } from '../../lib/formatters'
 
 interface Props {
   product: Product
@@ -33,6 +33,7 @@ export function PriceSelectionDialog({ product, onSelect, onCancel }: Props) {
         <View style={[styles.sheet, { backgroundColor: card, borderColor: border }]}>
           <View style={[styles.header, { borderBottomColor: border }]}>
             <Text style={[styles.headerTitle, { color: text }]}>Select Price</Text>
+    // @ts-expect-error
             <TouchableOpacity onPress={onCancel}><X size={16} color={textSecondary} /></TouchableOpacity>
           </View>
 

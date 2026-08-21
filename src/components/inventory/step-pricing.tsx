@@ -4,6 +4,7 @@ import { GroupPriceRow } from './group-price-row'
 import { ToggleRow } from './toggle-row'
 import { PricingLooseCard } from './pricing-loose-card'
 import { PricingBulkCard } from './pricing-bulk-card'
+import { spacing, radius } from '../../lib/theme'
 
 interface GroupPrice {
   name: string; price: string; minQuantity: string
@@ -22,7 +23,7 @@ interface Props {
 
 function inputStyle(c: Record<string, string>) {
   return {
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+    borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 15, borderWidth: 1,
     backgroundColor: c.card, color: c.text, borderColor: c.border,
   }
@@ -32,18 +33,21 @@ export function renderPricingStep({
   form, set, c, errors, onAddGroupPrice, onRemoveGroupPrice, onUpdateGroupPrice, isEdit,
 }: Props) {
   const isLoose = form.productType !== 'bulk'
+  const trackInventory = !!form.trackInventory
   const groupPrices = (form.groupPrices as GroupPrice[]) || []
 
   return (
-    <ScrollView style={{ gap: 16 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ gap: spacing.lg }} showsVerticalScrollIndicator={false}>
+      {/* Pricing Card */}
       {isLoose ? (
         <PricingLooseCard form={form} set={set} c={c} errors={errors} />
       ) : (
         <PricingBulkCard form={form} set={set} c={c} errors={errors} />
       )}
 
-      <View>
-        <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 8 }}>Group Prices</Text>
+      {/* Group Prices Card */}
+      <View style={{ backgroundColor: c.card, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: c.border, gap: spacing.md }}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: spacing.xs }}>Group Prices</Text>
         {groupPrices.map((gp, i) => (
           <GroupPriceRow
             key={i}
@@ -56,9 +60,9 @@ export function renderPricingStep({
         ))}
         <TouchableOpacity
           style={{
-            borderRadius: 10, paddingVertical: 14,
+            borderRadius: radius.md, paddingVertical: 14,
             alignItems: 'center', borderWidth: 1, borderColor: c.brand,
-            borderStyle: 'dashed', marginTop: 4,
+            borderStyle: 'dashed',
           }}
           onPress={onAddGroupPrice}
         >
@@ -66,33 +70,42 @@ export function renderPricingStep({
         </TouchableOpacity>
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>
-            {isEdit ? 'Stock Quantity' : 'Opening Stock'}
-          </Text>
-          <TextInput
-            style={inputStyle(c)} placeholder="0" placeholderTextColor={c.textSecondary}
-            value={(form.stockQuantity as string) || ''} onChangeText={(v) => set('stockQuantity', v)}
-            keyboardType="number-pad"
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Low Stock Alert</Text>
-          <TextInput
-            style={inputStyle(c)} placeholder="10" placeholderTextColor={c.textSecondary}
-            value={(form.lowStockThreshold as string) || ''} onChangeText={(v) => set('lowStockThreshold', v)}
-            keyboardType="number-pad"
-          />
-        </View>
-      </View>
+      {/* Stock Settings Card */}
+      <View style={{ backgroundColor: c.card, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: c.border, gap: spacing.md }}>
+        <ToggleRow
+          label="Track inventory for this product"
+          checked={trackInventory}
+          onToggle={() => set('trackInventory', !trackInventory)}
+          c={c}
+          hint="When enabled, the app will monitor stock levels and alert you when inventory falls below the low stock threshold."
+        />
 
-      <ToggleRow
-        label="Track inventory for this product"
-        checked={!!form.trackInventory}
-        onToggle={() => set('trackInventory', !form.trackInventory)}
-        c={c}
-      />
+        {trackInventory && (
+          <View style={{ gap: spacing.md }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>Stock Levels</Text>
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: c.text, marginBottom: spacing.xs }}>
+                  {isEdit ? 'Current Stock' : 'Opening Stock'}
+                </Text>
+                <TextInput
+                  style={inputStyle(c)} placeholder="0" placeholderTextColor={c.textSecondary}
+                  value={(form.stockQuantity as string) || ''} onChangeText={(v) => set('stockQuantity', v)}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: c.text, marginBottom: spacing.xs }}>Low Stock Alert</Text>
+                <TextInput
+                  style={inputStyle(c)} placeholder="10" placeholderTextColor={c.textSecondary}
+                  value={(form.lowStockThreshold as string) || ''} onChangeText={(v) => set('lowStockThreshold', v)}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
     </ScrollView>
   )
 }

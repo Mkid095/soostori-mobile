@@ -1,7 +1,7 @@
 // Report export helpers — pure functions, no side effects
 
 import type { Sale } from '../lib/types'
-import { formatCurrency } from './utils'
+import { formatCurrency } from './formatters'
 
 export type ExportPeriod = 'today' | 'week' | 'month' | 'year' | 'all'
 

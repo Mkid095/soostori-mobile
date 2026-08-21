@@ -139,6 +139,9 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       mpesa_send_money_phone TEXT,
       mpesa_paybill_number TEXT,
       mpesa_paybill_account TEXT,
+      bank_paybill_number TEXT,
+      bank_paybill_account TEXT,
+      mpesa_pochi_phone TEXT,
       enabled_payment_channels TEXT,
       biometric_enabled INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT (datetime('now'))
@@ -164,6 +167,9 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `)
+
+  // Seed default shop_settings row (idempotent — INSERT OR IGNORE)
+  await db.execAsync(`INSERT OR IGNORE INTO shop_settings (id) VALUES ('default')`)
 
   // Migrate: add enabled_payment_channels column if it doesn't exist (existing installs)
   try {

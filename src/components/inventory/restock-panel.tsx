@@ -46,6 +46,7 @@ export function RestockPanel({ product, onClose, onDone }: Props) {
       <View style={s.header}>
         <Text style={{ fontSize: 15, fontWeight: '800', color: text }}>Restock: {product.name}</Text>
         <TouchableOpacity onPress={onClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: bg, justifyContent: 'center', alignItems: 'center' }}>
+    // @ts-expect-error
           <X size={18} color={text} />
         </TouchableOpacity>
       </View>

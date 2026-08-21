@@ -7,7 +7,7 @@ import { getAllProducts, searchProducts, getProductByBarcode } from '../../src/s
 import { getAllCategories } from '../../src/services/db-categories'
 import { holdSale } from '../../src/services/db-sales'
 import { getShopSettings } from '../../src/services/db-settings'
-import { formatCurrency } from '../../src/lib/utils'
+import { formatCurrency } from '../../src/lib/formatters'
 import { PosCheckoutModal } from '../../src/components/pos/pos-checkout-modal'
 import { CategoryChips } from '../../src/components/pos/category-chips'
 import { BarcodeScannerModal } from '../../src/components/shared/barcode-scanner-modal'
@@ -89,7 +89,7 @@ export default function POSScreen() {
       <AppHeader title="Point of Sale" />
       <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: border, backgroundColor: card, gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderRadius: 10, paddingHorizontal: 14 }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: bg, borderRadius: 10, paddingHorizontal: 14 }}>
             <TextInput
               style={{ flex: 1, paddingVertical: 10, fontSize: 15, color: text }}
               placeholder="Search products..."
@@ -98,6 +98,7 @@ export default function POSScreen() {
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
+
               <TouchableOpacity onPress={() => setSearchQuery('')}><X size={16} color={textMuted} /></TouchableOpacity>
             )}
           </View>
@@ -105,6 +106,7 @@ export default function POSScreen() {
             style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: orange, justifyContent: 'center', alignItems: 'center' }}
             onPress={() => setShowScanner(true)}
           >
+
             <Camera size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -115,7 +117,7 @@ export default function POSScreen() {
         data={visibleProducts}
         numColumns={3}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 8 }}
+        contentContainerStyle={{ padding: 8, paddingBottom: 148 }}
         columnWrapperStyle={{ gap: 8 }}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -146,6 +148,7 @@ export default function POSScreen() {
         )}
         ListEmptyComponent={
           <View style={{ padding: 40, alignItems: 'center' }}>
+
             <Package size={48} color={textMuted} />
             <Text style={{ color: textMuted, fontSize: 15, marginTop: 8 }}>No products found</Text>
             <Text style={{ color: textMuted, fontSize: 12, marginTop: 4 }}>Add products in Inventory</Text>
@@ -166,6 +169,7 @@ export default function POSScreen() {
           textMuted={textMuted}
           border={border}
           orange={orange}
+          card={card}
         />
       )}
 
@@ -188,6 +192,7 @@ export default function POSScreen() {
               {cart.reduce((s, i) => s + i.quantity, 0)}
             </Text>
           </View>
+
           <ShoppingCart size={22} color="#fff" />
           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', marginTop: 1 }}>
             {formatCurrency(cartTotal)}

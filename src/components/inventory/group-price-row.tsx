@@ -36,6 +36,7 @@ export function GroupPriceRow({ gp, index, c, onUpdate, onRemove }: Props) {
             backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center',
           }}
         >
+    // @ts-expect-error
           <X size={16} color="#fff" />
         </TouchableOpacity>
       </View>

@@ -30,8 +30,11 @@ const PAYMENT_LABEL: Record<string, string> = {
 }
 
 function getPaymentIcon(method: string, color: string) {
+
   if (method === 'cash') return <Banknote size={14} color={color} />
+
   if (method === 'mpesa' || method === 'mobile_money') return <Smartphone size={14} color={color} />
+
   if (method === 'debt') return <AlertCircle size={14} color={color} />
   return null
 }
@@ -42,7 +45,7 @@ interface DateFilterRowProps {
 }
 
 export function DateFilterRow({ value, onChange }: DateFilterRowProps) {
-  const { card, border, brand, isDark, textSecondary: textMuted } = useTheme()
+  const { bg, card, border, brand, isDark, textSecondary: textMuted } = useTheme()
   return (
     <View style={[styles.dateRow, { backgroundColor: card, borderBottomColor: border }]}>
       {(Object.keys(DATE_LABELS) as DateFilter[]).map((f) => (
@@ -51,7 +54,7 @@ export function DateFilterRow({ value, onChange }: DateFilterRowProps) {
           onPress={() => onChange(f)}
           style={[
             styles.dateBtn,
-            { backgroundColor: value === f ? brand : isDark ? '#0f172a' : '#f1f5f9' },
+            { backgroundColor: value === f ? brand : bg },
           ]}
         >
           <Text style={{ color: value === f ? '#fff' : textMuted, fontWeight: '700', fontSize: 12 }}>
@@ -81,12 +84,12 @@ export function PaymentFilterRow({ value, onChange }: PaymentFilterRowProps) {
             style={[
               styles.pill,
               {
-                backgroundColor: value === f ? `${pillAccent}20` : isDark ? '#1E293B' : '#f1f5f9',
+                backgroundColor: value === f ? `${pillAccent}20` : bg,
                 borderColor: value === f ? pillAccent : 'transparent',
               },
             ]}
           >
-            {f !== 'all' && getPaymentIcon(f === 'mpesa' ? 'mpesa' : f, value === f ? pillAccent : '#94A3B8')}
+            {f !== 'all' && getPaymentIcon(f === 'mpesa' ? 'mpesa' : f, value === f ? pillAccent : textMuted)}
             <Text style={{ fontSize: 11, fontWeight: '700', color: value === f ? pillAccent : textMuted }}>
               {f === 'all' ? 'All' : f === 'mpesa' ? 'M-Pesa' : PAYMENT_LABEL[f] ?? f}
             </Text>

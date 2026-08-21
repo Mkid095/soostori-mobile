@@ -9,7 +9,7 @@ import { useTheme } from '../../src/hooks/useTheme'
 import type { Sale } from '../../src/lib/types'
 import { getAllSales, getTodaySales, getWeekSales, getMonthSales } from '../../src/services/db-sales'
 import { getTotalDebtCollected, getDebtCollectedByDateRange } from '../../src/services/db-debts'
-import { formatDate } from '../../src/lib/utils'
+import { formatDate } from '../../src/lib/formatters'
 import { ExportModal } from '../../src/components/reports/export-modal'
 import { SaleDetailModal } from '../../src/components/reports/sale-detail-modal'
 import { SaleRow } from '../../src/components/reports/sale-row'
@@ -99,10 +99,11 @@ export default function ReportsScreen() {
       <AppHeader title="Sales Reports" />
       <DateFilterRow value={dateFilter} onChange={setDateFilter} />
       <PaymentFilterRow value={paymentFilter} onChange={setPaymentFilter} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 88 }} showsVerticalScrollIndicator={false}>
         <StatsSection stats={stats} debtCollected={debtCollected} dateRangeLabel={dateRangeLabel} />
         {chartData.items.length > 0 && <SimpleBarChart data={chartData.items} maxValue={chartData.max} />}
         <TouchableOpacity onPress={() => setShowExport(true)} style={[s.exportBtn, { backgroundColor: brand }]}>
+
           <Download size={15} color="#fff" /><Text style={s.exportBtnText}>Export Report</Text>
         </TouchableOpacity>
         <View style={s.listHeader}>
@@ -111,6 +112,7 @@ export default function ReportsScreen() {
         </View>
         {filteredSales.length === 0 ? (
           <View style={[s.empty, { backgroundColor: card, borderColor: border }]}>
+
             <Receipt size={32} color={textMuted} /><Text style={[s.emptyText, { color: textMuted }]}>No sales found</Text>
           </View>
         ) : filteredSales.map((sale) => (

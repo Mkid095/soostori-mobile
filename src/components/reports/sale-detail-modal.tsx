@@ -83,6 +83,7 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
         <View style={[styles.header, { borderBottomColor: border }]}>
           <Text style={[styles.title, { color: text }]}>Sale Details</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+
             <X size={20} color={text} />
           </TouchableOpacity>
         </View>
@@ -100,6 +101,7 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
             onPress={handleShare}
             disabled={sharing}
           >
+
             <Share2 size={16} color={text} />
             <Text style={[styles.actionBtnText, { color: text }]}>
               {sharing ? 'Sharing...' : 'Share'}
@@ -110,6 +112,7 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
             onPress={handlePrint}
             disabled={printing}
           >
+
             <Printer size={16} color="#fff" />
             <Text style={[styles.actionBtnText, { color: '#fff' }]}>
               {printing ? 'Printing...' : 'Print'}

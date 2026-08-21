@@ -1,10 +1,10 @@
-// CategoryPickerModal — scrollable modal picker with search and create
+// CategoryPickerModal — themed scrollable modal picker for selecting existing categories
 import { useState } from 'react'
 import {
   View, Text, TouchableOpacity, Modal, TextInput,
   ScrollView,
 } from 'react-native'
-import { X, Search, Check, Plus } from 'lucide-react-native'
+import { X, Search, Check } from 'lucide-react-native'
 import type { Category } from '../../lib/types'
 import { categoryPickerStyles as s } from './category-picker-styles'
 
@@ -14,18 +14,16 @@ interface Props {
   categories: Category[]
   selectedId?: string
   onSelect: (cat: Category) => void
-  onAddNew: (name: string) => void
+  c: Record<string, string>
 }
 
 export function CategoryPickerModal({
-  visible, onClose, categories, selectedId, onSelect, onAddNew,
+  visible, onClose, categories, selectedId, onSelect, c,
 }: Props) {
   const [search, setSearch] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
 
-  const filtered = categories.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+  const filtered = categories.filter((cat) =>
+    cat.name.toLowerCase().includes(search.toLowerCase())
   )
 
   function handleSelect(cat: Category) {
@@ -34,31 +32,25 @@ export function CategoryPickerModal({
     setSearch('')
   }
 
-  function handleCreate() {
-    if (!newName.trim()) return
-    onAddNew(newName.trim())
-    setNewName('')
-    setShowCreate(false)
-    onClose()
-  }
-
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
-        <View style={s.sheet} onStartShouldSetResponder={() => true}>
-          <View style={s.header}>
-            <Text style={s.title}>Select Category</Text>
-            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-              <X size={20} color="#64748b" />
+      <TouchableOpacity style={[s.backdrop, { backgroundColor: 'rgba(0,0,0,0.5)' }]} activeOpacity={1} onPress={onClose}>
+        <View style={[s.sheet, { backgroundColor: c.card }]} onStartShouldSetResponder={() => true}>
+          <View style={[s.header, { borderBottomColor: c.border }]}>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: c.text }}>Select Category</Text>
+            <TouchableOpacity onPress={onClose} style={[s.closeBtn, { backgroundColor: c.bg }]}>
+              
+              <X size={20} color={c.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <View style={s.searchRow}>
-            <Search size={16} color="#94a3b8" style={s.searchIcon} />
+          <View style={[s.searchRow, { backgroundColor: c.bg, borderColor: c.border }]}>
+            
+            <Search size={16} color={c.textSecondary} style={s.searchIcon} />
             <TextInput
-              style={s.searchInput}
+              style={[s.searchInput, { color: c.text }]}
               placeholder="Search categories..."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={c.textSecondary}
               value={search}
               onChangeText={setSearch}
               autoCapitalize="none"
@@ -66,47 +58,37 @@ export function CategoryPickerModal({
           </View>
 
           <ScrollView style={s.list} showsVerticalScrollIndicator={false}>
-            {filtered.length === 0 && !showCreate ? (
-              <Text style={s.empty}>No categories found</Text>
+            {filtered.length === 0 ? (
+              <Text style={[s.empty, { color: c.textSecondary }]}>No categories found</Text>
             ) : (
               filtered.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
-                  style={[s.item, selectedId === cat.id && s.itemSelected]}
+                  style={[
+                    s.item,
+                    { borderColor: 'transparent' },
+                    selectedId === cat.id && { backgroundColor: c.brand + '15', borderColor: c.brand },
+                  ]}
                   onPress={() => handleSelect(cat)}
                 >
                   <View style={[s.colorDot, { backgroundColor: cat.color }]} />
-                  <Text style={[s.itemText, selectedId === cat.id && s.itemTextSelected]}>
+                  <Text
+                    style={[
+                      s.itemText,
+                      { color: c.text },
+                      selectedId === cat.id && { color: c.brand, fontWeight: '700' },
+                    ]}
+                  >
                     {cat.name}
                   </Text>
                   {selectedId === cat.id && (
-                    <View style={s.checkBadge}>
-                      <Check size={14} color="#fff" />
+                    <View style={[s.checkBadge, { backgroundColor: c.brand }]}>
+                      
+                      <Check size={14} color={c.card} />
                     </View>
                   )}
                 </TouchableOpacity>
               ))
-            )}
-
-            {showCreate ? (
-              <View style={s.createRow}>
-                <TextInput
-                  style={s.createInput}
-                  placeholder="Category name"
-                  placeholderTextColor="#94a3b8"
-                  value={newName}
-                  onChangeText={setNewName}
-                  autoFocus
-                />
-                <TouchableOpacity style={s.createBtn} onPress={handleCreate}>
-                  <Text style={s.createBtnText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={s.addBtn} onPress={() => setShowCreate(true)}>
-                <Plus size={16} color="#f97316" />
-                <Text style={s.addBtnText}>Create New Category</Text>
-              </TouchableOpacity>
             )}
           </ScrollView>
         </View>

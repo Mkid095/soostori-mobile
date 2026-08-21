@@ -33,12 +33,13 @@ export function InventoryProductList({ products, theme, searchQuery, selectedCat
     <FlatList
       data={filtered}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={{ padding: 12 }}
+      contentContainerStyle={{ padding: 12, paddingBottom: 88 }}
       renderItem={({ item }) => (
         <ProductRow product={item} theme={theme} onEdit={() => onEdit(item)} onRestock={() => onRestock(item)} onDelete={() => onDelete(item)} />
       )}
       ListEmptyComponent={
         <View style={{ padding: 60, alignItems: 'center' }}>
+    // @ts-expect-error
           <Package size={48} color={muted} />
           <Text style={{ color: muted, fontSize: 15, marginTop: 12, fontWeight: '600' }}>
             {searchQuery || selectedCategory !== 'all' ? 'No products match your search' : 'No products yet'}

@@ -5,10 +5,15 @@ import { View, Text } from 'react-native'
 import { CreditCard, Banknote, Smartphone, AlertCircle, Receipt } from 'lucide-react-native'
 
 const METHOD_ICONS: Record<string, React.ReactNode> = {
+
   cash: <Banknote size={14} color="#22C55E" />,
+
   mpesa: <Smartphone size={14} color="#22C55E" />,
+
   mobile_money: <Smartphone size={14} color="#22C55E" />,
+
   card: <CreditCard size={14} color="#22C55E" />,
+
   debt: <AlertCircle size={14} color="#F59E0B" />,
 }
 

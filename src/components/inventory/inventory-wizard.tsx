@@ -10,6 +10,7 @@ import { CategoryPickerModal } from './category-picker-modal'
 import { UnitPickerModal } from './unit-picker-modal'
 import { WizardHeader } from './wizard-header'
 import { WizardFooter } from './wizard-footer'
+import { AddCategoryDialog } from './add-category-dialog'
 import { renderTypeStep } from './step-type'
 import { renderDetailsStep } from './step-details'
 import { renderPricingStep } from './step-pricing'
@@ -20,18 +21,16 @@ import type { WizardProps } from './wizard-types'
 export function InventoryWizard(props: WizardProps) {
   const { visible, onClose, onSaved, isEdit, initialForm, onSave } = props
   const { bg, card, text, textSecondary: muted, border, brand: orange, success, danger } = useTheme()
-  const [newCatName, setNewCatName] = useState('')
+  const [showAddCatDialog, setShowAddCatDialog] = useState(false)
 
   const c = { bg, card, text, textSecondary: muted, border, brand: orange, success, danger }
 
   const wizard = useWizardState({ ...props, onClose })
 
-  async function addCategory() {
-    if (!newCatName.trim()) return
+  async function createCategory(name: string, color: string) {
     const { createCategory: cc } = await import('../../services/db-categories')
-    const cat = await cc({ name: newCatName.trim(), color: '#f97316', isActive: true })
+    const cat = await cc({ name, color, isActive: true })
     wizard.setForm((f) => ({ ...f, categoryId: cat.id, categoryName: cat.name, categoryColor: cat.color }))
-    setNewCatName('')
   }
 
   function selectCategory(cat: Category) {
@@ -47,7 +46,7 @@ export function InventoryWizard(props: WizardProps) {
         form: form as unknown as Record<string, unknown>, set, c,
         categories: wizard.categories,
         onSelectCategory: selectCategory,
-        onAddCategory: addCategory,
+        onAddCategory: () => setShowAddCatDialog(true),
         errors: wizard.errors,
         onOpenCategoryPicker: () => wizard.setShowCatPicker(true),
         onOpenUnitPicker: () => wizard.setShowUnitPicker(true),
@@ -125,10 +124,7 @@ export function InventoryWizard(props: WizardProps) {
         categories={wizard.categories}
         selectedId={wizard.form.categoryId}
         onSelect={selectCategory}
-        onAddNew={(name: string) => {
-          setNewCatName(name)
-          addCategory()
-        }}
+        c={c}
       />
 
       <UnitPickerModal
@@ -136,6 +132,13 @@ export function InventoryWizard(props: WizardProps) {
         onClose={() => wizard.setShowUnitPicker(false)}
         selectedUnit={wizard.form.unit}
         onSelect={(unit) => wizard.set('unit', unit)}
+      />
+
+      <AddCategoryDialog
+        visible={showAddCatDialog}
+        onClose={() => setShowAddCatDialog(false)}
+        onCreated={createCategory}
+        c={c}
       />
     </Modal>
   )
