@@ -1,8 +1,9 @@
 // app/auth.tsx — PIN login screen with optional biometric
 import React, { useState, useCallback, useEffect } from 'react'
-import { View, Text, StyleSheet, Animated } from 'react-native'
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native'
 import { router } from 'expo-router'
 import * as LocalAuthentication from 'expo-local-authentication'
+import { Store } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
 import { getShopSettings } from '../src/services/db-settings'
 import { PinKeypad } from '../src/components/auth/pin-keypad'
@@ -15,9 +16,9 @@ type BiometricStatus = 'unavailable' | 'not_enrolled' | 'ready' | 'enabled'
 function getBiometricHint(status: BiometricStatus): string {
   switch (status) {
     case 'unavailable': return 'Biometric not available on this device'
-    case 'not_enrolled': return 'No fingerprint/face enrolled — set up in device settings'
+    case 'not_enrolled': return 'No fingerprint or face enrolled — set up in device settings'
     case 'enabled': return 'Enable biometric in Settings to use this'
-    case 'ready': return 'Tap fingerprint to login'
+    case 'ready': return 'Tap fingerprint to sign in'
     default: return ''
   }
 }
@@ -84,21 +85,46 @@ export default function AuthScreen() {
 
   const handleDelete = useCallback(() => { setPin((p) => p.slice(0, -1)); setError('') }, [])
 
-  const dots = Array.from({ length: PIN_LENGTH }).map((_, i) => (
-    <View key={i} style={[styles.dot, { backgroundColor: i < pin.length ? theme.brand : 'transparent', borderColor: i < pin.length ? theme.brand : theme.muted }]} />
-  ))
+  const dots = Array.from({ length: PIN_LENGTH }).map((_, i) => {
+    const filled = i < pin.length
+    return (
+      <View
+        key={i}
+        style={[
+          styles.dot,
+          {
+            backgroundColor: filled ? theme.brand : 'transparent',
+            borderColor: filled ? theme.brand : theme.muted,
+          },
+        ]}
+      />
+    )
+  })
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.content}>
-        <View style={[styles.logoContainer, { backgroundColor: theme.brand }]}>
-          <Text style={styles.logoText}>S</Text>
+        {/* Logo mark */}
+        <View style={[styles.logoMark, { backgroundColor: theme.brand }]}>
+          <Store size={36} color="#fff" />
         </View>
+
         <Text style={[styles.title, { color: theme.text }]}>Enter PIN</Text>
-        <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>{dots}</Animated.View>
-        {error ? <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-          : <Text style={[styles.errorText, { color: 'transparent' }]}>error</Text>}
-        {bioReason ? <Text style={[styles.errorText, { color: theme.danger }]}>{bioReason}</Text> : null}
+
+        {/* PIN dots */}
+        <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>
+          {dots}
+        </Animated.View>
+
+        {/* Error messages */}
+        {error
+          ? <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
+          : bioReason
+            ? <Text style={[styles.errorText, { color: theme.danger }]}>{bioReason}</Text>
+            : <View style={styles.errorSpacer} />
+        }
+
+        {/* Keypad */}
         <PinKeypad
           onDigit={handleDigit}
           onDelete={handleDelete}
@@ -109,6 +135,7 @@ export default function AuthScreen() {
           brandColor={theme.brand}
           mutedColor={theme.muted}
         />
+
         <Text style={[styles.hintText, { color: theme.textSecondary }]}>{getBiometricHint(bioStatus)}</Text>
       </View>
     </View>
@@ -118,11 +145,27 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { alignItems: 'center', width: '100%', paddingHorizontal: 40 },
-  logoContainer: { width: 72, height: 72, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-  logoText: { fontSize: 36, fontWeight: '700', color: '#fff' },
-  title: { fontSize: 22, fontWeight: '600', marginBottom: 24 },
-  dotsContainer: { flexDirection: 'row', gap: 12, marginBottom: 8 },
-  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
-  errorText: { fontSize: 13, height: 18, marginBottom: 16 },
-  hintText: { fontSize: 11, marginTop: 16, textAlign: 'center' },
+  logoMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    ...Platform.select({
+      ios: { shadowColor: '#F97316', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12 },
+      android: { elevation: 8 },
+    }),
+  },
+  title: { fontSize: 22, fontWeight: '600', marginBottom: 28 },
+  dotsContainer: { flexDirection: 'row', gap: 16, marginBottom: 8 },
+  dot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+  },
+  errorText: { fontSize: 13, fontWeight: '500', marginBottom: 4, height: 18 },
+  errorSpacer: { height: 18, marginBottom: 4 },
+  hintText: { fontSize: 12, marginTop: 20, textAlign: 'center' },
 })

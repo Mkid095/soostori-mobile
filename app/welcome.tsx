@@ -1,11 +1,19 @@
 ﻿// app/welcome.tsx — First-run onboarding screen
 import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
+import { Store, Check } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
 
 const FIRST_RUN_KEY = '@soostori:firstRun'
+
+const FEATURES = [
+  'Works completely offline',
+  'Track inventory in real-time',
+  'Manage sales and debt',
+  'Generate detailed reports',
+]
 
 export default function WelcomeScreen() {
   const theme = useTheme()
@@ -18,30 +26,32 @@ export default function WelcomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.content}>
-        <View style={[styles.logoContainer, { backgroundColor: theme.brand }]}>
-          <Text style={styles.logoText}>S</Text>
+        {/* Logo mark */}
+        <View style={[styles.logoMark, { backgroundColor: theme.brand }]}>
+          <Store size={44} color="#fff" />
         </View>
+
         <Text style={[styles.title, { color: theme.text }]}>Welcome to Soostori POS</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Your offline-first point of sale system</Text>
+
+        {/* Feature list */}
         <View style={styles.features}>
-          <View style={styles.featureItem}>
-            <Text style={[styles.featureIcon, { color: theme.brand }]}>* </Text>
-            <Text style={[styles.featureText, { color: theme.text }]}>Works completely offline</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={[styles.featureIcon, { color: theme.brand }]}>* </Text>
-            <Text style={[styles.featureText, { color: theme.text }]}>Track inventory in real-time</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={[styles.featureIcon, { color: theme.brand }]}>* </Text>
-            <Text style={[styles.featureText, { color: theme.text }]}>Manage sales and debt</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={[styles.featureIcon, { color: theme.brand }]}>* </Text>
-            <Text style={[styles.featureText, { color: theme.text }]}>Generate detailed reports</Text>
-          </View>
+          {FEATURES.map((feature) => (
+            <View key={feature} style={styles.featureItem}>
+              <View style={[styles.checkBadge, { backgroundColor: theme.brand + '20' }]}>
+                <Check size={14} color={theme.brand as string} strokeWidth={3} />
+              </View>
+              <Text style={[styles.featureText, { color: theme.text }]}>{feature}</Text>
+            </View>
+          ))}
         </View>
-        <TouchableOpacity style={[styles.button, { backgroundColor: theme.brand }]} onPress={handleGetStarted} activeOpacity={0.8}>
+
+        {/* CTA */}
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: theme.brand }]}
+          onPress={handleGetStarted}
+          activeOpacity={0.85}
+        >
           <Text style={styles.buttonText}>Get Started</Text>
         </TouchableOpacity>
       </View>
@@ -52,14 +62,30 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { alignItems: 'center', width: '100%', paddingHorizontal: 40 },
-  logoContainer: { width: 96, height: 96, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-  logoText: { fontSize: 48, fontWeight: '700', color: '#fff' },
+  logoMark: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    ...Platform.select({
+      ios: { shadowColor: '#F97316', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 16 },
+      android: { elevation: 10 },
+    }),
+  },
   title: { fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 15, textAlign: 'center', marginBottom: 40 },
-  features: { width: '100%', marginBottom: 48, gap: 16 },
+  subtitle: { fontSize: 15, textAlign: 'center', marginBottom: 36 },
+  features: { width: '100%', marginBottom: 44, gap: 16 },
   featureItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  featureIcon: { fontSize: 18, fontWeight: '700' },
-  featureText: { fontSize: 15 },
+  checkBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featureText: { fontSize: 15, fontWeight: '500', flex: 1 },
   button: { width: '100%', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
 })

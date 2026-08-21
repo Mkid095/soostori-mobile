@@ -3,6 +3,8 @@
 
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native'
+import { Fingerprint, Delete } from 'lucide-react-native'
+import { radius } from '../../lib/theme'
 
 interface Props {
   onDigit: (digit: string) => void
@@ -17,14 +19,14 @@ interface Props {
 
 export function PinKeypad({ onDigit, onDelete, onBiometric, biometricEnabled, cardBg, textColor, brandColor, mutedColor }: Props) {
   const { width } = Dimensions.get('window')
-  const BUTTON_SIZE = width * 0.2
+  const BUTTON_SIZE = Math.floor(width * 0.2)
   const rows = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'delete']]
 
   return (
     <View style={styles.keypad}>
       {rows.map((row, ri) => (
         <View key={ri} style={styles.row}>
-          {row.map((key, _ki) => {
+          {row.map((key) => {
             if (key === '') {
               const iconColor = biometricEnabled ? brandColor : mutedColor
               return (
@@ -34,8 +36,9 @@ export function PinKeypad({ onDigit, onDelete, onBiometric, biometricEnabled, ca
                   onPress={biometricEnabled ? onBiometric : undefined}
                   disabled={!biometricEnabled}
                   accessibilityLabel="Fingerprint"
+                  activeOpacity={0.7}
                 >
-                  <Text style={[styles.icon, { color: iconColor }]}>{'\u{1F91A}'}</Text>
+                  <Fingerprint size={28} color={iconColor} />
                 </TouchableOpacity>
               )
             }
@@ -46,8 +49,9 @@ export function PinKeypad({ onDigit, onDelete, onBiometric, biometricEnabled, ca
                   style={[styles.button, { backgroundColor: cardBg, width: BUTTON_SIZE, height: BUTTON_SIZE }]}
                   onPress={onDelete}
                   accessibilityLabel="Delete"
+                  activeOpacity={0.7}
                 >
-                  <Text style={[styles.deleteText, { color: textColor }]}>DEL</Text>
+                  <Delete size={22} color={textColor} />
                 </TouchableOpacity>
               )
             }
@@ -57,6 +61,7 @@ export function PinKeypad({ onDigit, onDelete, onBiometric, biometricEnabled, ca
                 style={[styles.button, { backgroundColor: cardBg, width: BUTTON_SIZE, height: BUTTON_SIZE }]}
                 onPress={() => onDigit(key)}
                 accessibilityLabel={key}
+                activeOpacity={0.6}
               >
                 <Text style={[styles.keyText, { color: textColor }]}>{key}</Text>
               </TouchableOpacity>
@@ -69,18 +74,16 @@ export function PinKeypad({ onDigit, onDelete, onBiometric, biometricEnabled, ca
 }
 
 const styles = StyleSheet.create({
-  keypad: { marginTop: 8, gap: 12 },
-  row: { flexDirection: 'row', gap: 12 },
+  keypad: { marginTop: 8, gap: 14 },
+  row: { flexDirection: 'row', gap: 14 },
   button: {
-    borderRadius: 100,
+    borderRadius: radius.full,
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-      android: { elevation: 2 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
+      android: { elevation: 3 },
     }),
   },
-  keyText: { fontSize: 28, fontWeight: '500' },
-  icon: { fontSize: 28 },
-  deleteText: { fontSize: 14, fontWeight: '600' },
+  keyText: { fontSize: 26, fontWeight: '500', fontVariant: ['tabular-nums'] },
 })
