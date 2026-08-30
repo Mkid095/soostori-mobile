@@ -3,6 +3,7 @@
 
 import * as SQLite from 'expo-sqlite'
 import { initSchema } from './db-schema'
+import { seedExpenseCategories } from './db-expense-seed'
 
 let db: SQLite.SQLiteDatabase | null = null
 
@@ -25,6 +26,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db
   db = await SQLite.openDatabaseAsync('soostori.db')
   await initSchema(db)
+  await seedExpenseCategories(db)
   // Migration: add new columns if they don't exist (safe to call on every launch)
   await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_number', 'TEXT')
   await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_account', 'TEXT')
@@ -46,6 +48,9 @@ export async function resetDb(): Promise<void> {
     DROP TABLE IF EXISTS debt_payments;
     DROP TABLE IF EXISTS sync_queue;
     DROP TABLE IF EXISTS app_settings;
+    DROP TABLE IF EXISTS expense_categories;
+    DROP TABLE IF EXISTS expenses;
   `)
   await initSchema(database)
+  await seedExpenseCategories(database)
 }
