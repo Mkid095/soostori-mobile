@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] — 2026-08-30
+
+### Critical POS Bug Fixes
+
+**Stock validation on sale** (`src/services/db-sales.ts`):
+- `InsufficientStockError` class thrown before sale record is created when any cart item exceeds available stock
+- `canSell(productId, qty)` helper in `db-products.ts` checks `stock_quantity >= qty`
+
+**Checkout cart stock warnings** (`src/components/pos/pos-checkout-modal.tsx`):
+- Cart item rows now highlight in amber border when quantity exceeds `trackInventory` stock
+- "Only X in stock" text shown below price in cart row
+- `InsufficientStockError` caught at checkout with descriptive alert
+
+**Barcode scan wizard protection** (`src/components/inventory/step-barcode.tsx`):
+- Manual barcode TextInput now has `onSubmitEditing` with `e.preventDefault()` to stop Enter key from advancing wizard
+- `returnKeyType="done"` set on barcode manual input
+
+**Duplicate product prevention — auto-suggest** (`src/components/inventory/`):
+- `product-suggest.tsx` — new dropdown component showing up to 5 name/sku/barcode matches
+- `step-details.tsx` — name input debounces 300ms, calls `searchProducts()`, shows suggestions below field
+- `wizard-types.ts` — `WizardProps.onSelectSuggestion` prop added
+- `inventory-wizard.tsx` — `onSelectSuggestion` threaded through to details step
+- `inventory-add-form.tsx` — passes `onSelectSuggestion` to wizard; selecting a suggestion closes add wizard and opens edit form
+- `inventory.tsx` — add form's `onSelectSuggestion` wired to `setEditing(product)`
+
 ## [1.1.0] — 2026-08-05
 
 ### Navigation & Bottom Tab Bar

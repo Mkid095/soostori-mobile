@@ -1,8 +1,11 @@
 // Step 1: Product details (name, SKU, category, unit, image)
+import { useState, useRef, useCallback } from 'react'
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import { Camera, ChevronDown, Plus, Image } from 'lucide-react-native'
 import * as ImagePicker from 'expo-image-picker'
-import type { Category } from '../../lib/types'
+import type { Category, Product } from '../../lib/types'
+import { searchProducts } from '../../services/db-products'
+import { ProductSuggest } from './product-suggest'
 
 interface Props {
   form: Record<string, unknown>
@@ -14,6 +17,7 @@ interface Props {
   errors: Record<string, string>
   onOpenCategoryPicker: () => void
   onOpenUnitPicker: () => void
+  onSelectSuggestion?: (product: Product) => void
 }
 
 function inputStyle(c: Record<string, string>, hasError?: boolean) {
@@ -26,9 +30,26 @@ function inputStyle(c: Record<string, string>, hasError?: boolean) {
 
 export function renderDetailsStep({
   form, set, c, categories, onAddCategory,
-  errors, onOpenCategoryPicker, onOpenUnitPicker,
+  errors, onOpenCategoryPicker, onOpenUnitPicker, onSelectSuggestion,
 }: Props) {
+  const [suggestions, setSuggestions] = useState<Product[]>([])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const selectedCat = categories.find((cat) => cat.id === form.categoryId)
+
+  const handleNameChange = useCallback((v: string) => {
+    set('name', v)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (v.trim().length < 2) { setSuggestions([]); return }
+    debounceRef.current = setTimeout(async () => {
+      const results = await searchProducts(v.trim())
+      setSuggestions(results)
+    }, 300)
+  }, [set])
+
+  function handleSelectSuggestion(product: Product) {
+    setSuggestions([])
+    if (onSelectSuggestion) onSelectSuggestion(product)
+  }
 
   async function pickImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -77,15 +98,16 @@ export function renderDetailsStep({
   return (
     <ScrollView style={{ gap: 16, paddingVertical: 4 }} showsVerticalScrollIndicator={false}>
       {/* Product Name */}
-      <View>
+      <View style={{ zIndex: 10 }}>
         <Text style={{ fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 }}>Product Name *</Text>
         <TextInput
           style={inputStyle(c, !!errors.name)}
           placeholder="e.g. Maize Flour 2kg"
           placeholderTextColor={c.textSecondary}
           value={(form.name as string) || ''}
-          onChangeText={(v) => set('name', v)}
+          onChangeText={handleNameChange}
         />
+        <ProductSuggest suggestions={suggestions} onSelect={handleSelectSuggestion} c={c} />
         {errors.name && <Text style={{ color: c.danger, fontSize: 11, marginTop: 4 }}>{errors.name}</Text>}
       </View>
 

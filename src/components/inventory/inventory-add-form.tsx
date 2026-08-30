@@ -1,6 +1,14 @@
 // Add product form — thin wrapper around the shared InventoryWizard
 import { InventoryWizard } from './inventory-wizard'
-import type { ProductType } from './inventory-types'
+import type { Product } from '../../lib/types'
+import type { ProductForm } from './wizard-types'
+
+interface Props {
+  visible: boolean
+  onClose: () => void
+  onSaved: () => void
+  onSelectSuggestion?: (product: Product) => void
+}
 
 interface GroupPrice {
   name: string
@@ -8,14 +16,8 @@ interface GroupPrice {
   minQuantity: string
 }
 
-interface Props {
-  visible: boolean
-  onClose: () => void
-  onSaved: () => void
-}
-
-export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
-  async function handleSave(form: Record<string, any>) {
+export function InventoryAddForm({ visible, onClose, onSaved, onSelectSuggestion }: Props) {
+  async function handleSave(form: ProductForm) {
     const { createProduct } = await import('../../services/db-products')
     const groupPricesParsed = (form.groupPrices as GroupPrice[])
       .filter((gp) => gp.price && gp.minQuantity)
@@ -26,24 +28,24 @@ export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
       }))
 
     await createProduct({
-      name: form.name.trim(),
-      sku: form.sku?.trim() || undefined,
-      barcode: form.barcode?.trim() || undefined,
-      categoryId: form.categoryId || undefined,
-      categoryName: form.categoryName || undefined,
-      categoryColor: form.categoryColor || undefined,
-      unit: form.unit || 'piece',
-      costPrice: parseFloat(form.costPrice) || 0,
-      sellingPrice: parseFloat(form.sellingPrice) || 0,
-      allowSingleUnitSale: form.allowSingleUnitSale ?? true,
-      unitsPerPackage: form.unitsPerPackage ? parseInt(form.unitsPerPackage) : undefined,
-      boxBuyingPrice: form.boxBuyingPrice ? parseFloat(form.boxBuyingPrice) : undefined,
+      name: String(form.name).trim(),
+      sku: form.sku ? String(form.sku).trim() : undefined,
+      barcode: form.barcode ? String(form.barcode).trim() : undefined,
+      categoryId: form.categoryId ? String(form.categoryId) : undefined,
+      categoryName: form.categoryName ? String(form.categoryName) : undefined,
+      categoryColor: form.categoryColor ? String(form.categoryColor) : undefined,
+      unit: form.unit ? String(form.unit) : 'piece',
+      costPrice: parseFloat(String(form.costPrice)) || 0,
+      sellingPrice: parseFloat(String(form.sellingPrice)) || 0,
+      allowSingleUnitSale: Boolean(form.allowSingleUnitSale),
+      unitsPerPackage: form.unitsPerPackage ? parseInt(String(form.unitsPerPackage)) : undefined,
+      boxBuyingPrice: form.boxBuyingPrice ? parseFloat(String(form.boxBuyingPrice)) : undefined,
       groupPrices: groupPricesParsed.length ? groupPricesParsed : undefined,
-      stockQuantity: parseInt(form.stockQuantity) || 0,
-      lowStockThreshold: parseInt(form.lowStockThreshold) || 10,
-      trackInventory: form.trackInventory ?? true,
-      distributorName: form.distributorName?.trim() || undefined,
-      distributorPhone: form.distributorPhone?.trim() || undefined,
+      stockQuantity: parseInt(String(form.stockQuantity)) || 0,
+      lowStockThreshold: parseInt(String(form.lowStockThreshold)) || 10,
+      trackInventory: Boolean(form.trackInventory),
+      distributorName: form.distributorName ? String(form.distributorName).trim() : undefined,
+      distributorPhone: form.distributorPhone ? String(form.distributorPhone).trim() : undefined,
       isActive: true,
     })
   }
@@ -55,6 +57,7 @@ export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
       onSaved={onSaved}
       isEdit={false}
       onSave={handleSave}
+      onSelectSuggestion={onSelectSuggestion}
     />
   )
 }

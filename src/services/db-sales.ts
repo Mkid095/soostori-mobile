@@ -1,10 +1,18 @@
 // Sale CRUD operations — business logic in services, NOT components
 
 import { getDb } from '../lib/db'
+import { canSell } from './db-products'
 import type { Sale, SaleItem, CartItem, HeldSale } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapSaleRow } from './db-sales-mapper'
+
+export class InsufficientStockError extends Error {
+  constructor(public productName: string, public requested: number, public available: number) {
+    super(`Insufficient stock for "${productName}": requested ${requested}, available ${available}`)
+    this.name = 'InsufficientStockError'
+  }
+}
 
 export async function createSale(
   items: CartItem[],
@@ -21,6 +29,14 @@ export async function createSale(
   const itemsSummary = `${items.length} item${items.length !== 1 ? 's' : ''}`
   const itemsJson = JSON.stringify(items)
 
+  // Validate stock BEFORE inserting the sale record
+  for (const item of items) {
+    const { ok, available } = await canSell(item.productId, item.quantity)
+    if (!ok) {
+      throw new InsufficientStockError(item.productName, item.quantity, available)
+    }
+  }
+
   await db.runAsync(
     `INSERT INTO sales (id, type, status, subtotal, discount_amount, total_amount, paid_amount, payment_method, note, customer_id_number, items, items_summary, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -34,7 +50,6 @@ export async function createSale(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, id, item.productId, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
     )
-    // Adjust stock
     await db.runAsync(
       'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
       [item.quantity, item.productId]

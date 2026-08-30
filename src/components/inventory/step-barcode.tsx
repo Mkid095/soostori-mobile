@@ -151,7 +151,9 @@ export function renderBarcodeStep({ form, set, c, onScan, onGenerate, isEdit }: 
             placeholderTextColor={c.textSecondary}
             value={(form.barcode as string) || ''}
             onChangeText={(v) => set('barcode', v)}
+            onSubmitEditing={(e) => { e.preventDefault() }}
             keyboardType="default"
+            returnKeyType="done"
           />
         </View>
       )}

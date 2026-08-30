@@ -50,6 +50,7 @@ export function InventoryWizard(props: WizardProps) {
         errors: wizard.errors,
         onOpenCategoryPicker: () => wizard.setShowCatPicker(true),
         onOpenUnitPicker: () => wizard.setShowUnitPicker(true),
+        onSelectSuggestion: props.onSelectSuggestion,
       })}</>
       case 2: return <>{renderPricingStep({
         form: form as unknown as Record<string, unknown>, set, c, errors: wizard.errors,
