@@ -166,6 +166,21 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       last_login_date TEXT,
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS product_variants (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      sku TEXT,
+      barcode TEXT,
+      cost_price REAL,
+      selling_price REAL,
+      stock_quantity INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
   `)
 
   // Seed default shop_settings row (idempotent — INSERT OR IGNORE)

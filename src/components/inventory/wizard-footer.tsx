@@ -14,7 +14,7 @@ interface Props {
 
 export function WizardFooter({ step, isEdit, saving, onBack, onNext, onSubmit, c }: Props) {
   const { border, brand: orange, textSecondary: muted, success } = c
-  const isLast = step === 4
+  const isLast = step === 5
 
   return (
     <View style={{

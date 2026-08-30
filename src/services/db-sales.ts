@@ -30,15 +30,23 @@ export async function createSale(
   for (const item of items) {
     const itemId = generateId()
     await db.runAsync(
-      `INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, discount, total_price)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [itemId, id, item.productId, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
+      `INSERT INTO sale_items (id, sale_id, product_id, variation_name, product_name, quantity, unit_price, discount, total_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [itemId, id, item.productId, item.variationName || null, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
     )
-    // Adjust stock
-    await db.runAsync(
-      'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-      [item.quantity, item.productId]
-    )
+    // Adjust product stock (only if no variation)
+    if (!item.variationName) {
+      await db.runAsync(
+        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+        [item.quantity, item.productId]
+      )
+    } else {
+      // Adjust variant stock
+      await db.runAsync(
+        `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
+        [item.quantity, item.productId, item.variationName]
+      )
+    }
   }
 
   await queueSync('sales', 'create', id)

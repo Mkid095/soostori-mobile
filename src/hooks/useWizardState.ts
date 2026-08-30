@@ -3,6 +3,8 @@ import { useState, useCallback } from 'react'
 import type { Category } from '../lib/types'
 import type { ProductForm, GroupPrice, WizardProps } from '../components/inventory/wizard-types'
 import { makeInit } from '../components/inventory/wizard-types'
+import type { VariantRow } from '../components/inventory/step-variations'
+import { generateId } from '../lib/formatters'
 
 export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }: WizardProps) {
   const [step, setStep] = useState(0)
@@ -13,6 +15,7 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
   const [showScanner, setShowScanner] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [variants, setVariants] = useState<VariantRow[]>([])
 
   const loadCategories = useCallback(async () => {
     const { getAllCategories } = await import('../services/db-categories')
@@ -23,6 +26,7 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
     setForm({ ...makeInit(), ...initialForm } as ProductForm)
     setStep(0)
     setErrors({})
+    setVariants([])
     loadCategories()
   }, [initialForm, loadCategories])
 
@@ -49,7 +53,7 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
 
   const next = useCallback(() => {
     if (!validate()) return
-    setStep((s) => Math.min(s + 1, 4))
+    setStep((s) => Math.min(s + 1, 5))
   }, [validate])
 
   const back = useCallback(() => setStep((s) => Math.max(s - 1, 0)), [])
@@ -81,11 +85,23 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
     setForm((f) => ({ ...f, barcode: `SOO${Date.now()}${Math.floor(Math.random() * 1000)}` }))
   }, [])
 
-  const handleSubmit = useCallback(async () => {
+  const addVariant = useCallback(() => {
+    setVariants((v) => [...v, { id: generateId(), name: '', sku: '', barcode: '', sellingPrice: '', costPrice: '', stockQuantity: '' }])
+  }, [])
+
+  const removeVariant = useCallback((i: number) => {
+    setVariants((v) => v.filter((_, idx) => idx !== i))
+  }, [])
+
+  const updateVariant = useCallback((i: number, field: keyof VariantRow, value: string) => {
+    setVariants((v) => v.map((vr, idx) => idx === i ? { ...vr, [field]: value } : vr))
+  }, [])
+
+  const handleSubmit = useCallback(async (variants: VariantRow[]) => {
     if (!form.name?.trim()) return
     setSaving(true)
     try {
-      await onSave(form)
+      await onSave(form, variants)
       onSaved()
       close()
     } catch {
@@ -95,10 +111,11 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
   }, [form, onSave, onSaved, close, isEdit])
 
   return {
-    step, form, categories, showCatPicker, showUnitPicker, showScanner, saving, errors,
+    step, form, categories, showCatPicker, showUnitPicker, showScanner, saving, errors, variants,
     setForm, setStep, setShowCatPicker, setShowUnitPicker, setShowScanner, setSaving: setSaving,
     open, close, set, next, back,
     addGroupPrice, removeGroupPrice, updateGroupPrice,
     selectCategory, generateBarcode, handleSubmit,
+    addVariant, removeVariant, updateVariant,
   }
 }

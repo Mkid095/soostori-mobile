@@ -16,6 +16,7 @@ import { renderDetailsStep } from './step-details'
 import { renderPricingStep } from './step-pricing'
 import { renderDistributorStep } from './step-distributor'
 import { renderBarcodeStep } from './step-barcode'
+import { renderVariationsStep } from './step-variations'
 import type { WizardProps } from './wizard-types'
 
 export function InventoryWizard(props: WizardProps) {
@@ -67,6 +68,13 @@ export function InventoryWizard(props: WizardProps) {
         onGenerate: wizard.generateBarcode,
         isEdit: !!isEdit,
       })}</>
+      case 5: return <>{renderVariationsStep({
+        variants: wizard.variants,
+        onAdd: wizard.addVariant,
+        onRemove: wizard.removeVariant,
+        onUpdate: wizard.updateVariant,
+        c,
+      })}</>
       default: return null
     }
   }
@@ -75,7 +83,7 @@ export function InventoryWizard(props: WizardProps) {
     if (!wizard.form.name?.trim()) { Alert.alert('Required', 'Product name is required'); return }
     wizard.setSaving(true)
     try {
-      await onSave(wizard.form)
+      await onSave(wizard.form, wizard.variants)
       onSaved()
       wizard.close()
     } catch {

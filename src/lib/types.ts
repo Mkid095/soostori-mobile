@@ -176,3 +176,17 @@ export interface SyncQueueItem {
   createdAt: number
   syncedAt?: number
 }
+
+export interface ProductVariant {
+  id: string
+  productId: string
+  name: string
+  sku?: string
+  barcode?: string
+  costPrice?: number
+  sellingPrice?: number
+  stockQuantity: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
