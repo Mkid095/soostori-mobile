@@ -109,6 +109,19 @@ export async function deleteProduct(id: string): Promise<void> {
   await queueSync('products', 'delete', id)
 }
 
+export async function getLowStockProducts(): Promise<Product[]> {
+  const db = await getDb()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM products
+     WHERE is_active = 1
+       AND track_inventory = 1
+       AND low_stock_threshold > 0
+       AND stock_quantity <= low_stock_threshold
+     ORDER BY stock_quantity ASC`
+  )
+  return rows.map(mapProductRow)
+}
+
 export async function adjustStock(productId: string, quantity: number, reason: string): Promise<void> {
   const db = await getDb()
   const product = await getProductById(productId)
