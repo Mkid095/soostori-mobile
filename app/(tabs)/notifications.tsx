@@ -27,7 +27,7 @@ export default function NotificationsScreen() {
           <Text style={[styles.summaryText, { color: text }]}>
             {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
           </Text>
-          <TouchableOpacity onPress={markAllRead}>
+          <TouchableOpacity onPress={() => markAllRead()}>
             <Text style={[styles.markAll, { color: colors.brand }]}>Mark all read</Text>
           </TouchableOpacity>
         </View>

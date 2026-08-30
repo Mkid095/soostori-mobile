@@ -134,3 +134,11 @@ function mapRow(row: Record<string, unknown>): Debt {
     updatedAt: String(row.updated_at),
   }
 }
+
+export async function getPendingDebtCount(): Promise<number> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    "SELECT COUNT(*) as cnt FROM debts WHERE status IN ('pending', 'partial')"
+  )
+  return Number(row?.cnt ?? 0)
+}

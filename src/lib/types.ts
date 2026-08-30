@@ -1,5 +1,25 @@
 // Soostori Mobile — Core Types
 // Mirrors soostori-desktop/src/lib/types.ts for offline-first SQLite
+// Sync/team types imported from sync-protocol (shared contract with desktop)
+// Note: Sale/SaleItem NOT re-exported — local types have different shape
+
+export type {
+  Shop,
+  Employee,
+  Invitation,
+  Device,
+  DevicePairing,
+  SyncEvent,
+  InventoryTransaction,
+  AuditLog,
+  EmployeeRole,
+  DeviceType,
+  SaleStatus,
+  PairingStatus,
+  InventoryTransactionType,
+} from './sync-protocol'
+
+export type { SyncEventType } from './sync-protocol'
 
 export interface Product {
   id: string

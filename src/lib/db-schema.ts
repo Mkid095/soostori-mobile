@@ -1,8 +1,10 @@
-// SQLite schema — mirrors soostori-desktop/electron/database/schema-pos.ts
+// SQLite schema — ALL tables (base app + desktop-agent team/ sync)
+// Mirrors soostori-desktop/electron/database/schema-pos.ts
 
 import type * as SQLite from 'expo-sqlite'
 
 export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
+  // ── Base app tables ──────────────────────────────────────────────────────
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
@@ -213,19 +215,143 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     );
   `)
 
-  // Seed default shop_settings row (idempotent — INSERT OR IGNORE)
+  // ── Team / sync tables (desktop-agent) ──────────────────────────────────
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS shops (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS employees (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      pin_hash TEXT NOT NULL,
+      pin_salt TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'attendant',
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id),
+      FOREIGN KEY (employee_id) REFERENCES employees(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS devices (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      employee_id TEXT,
+      device_name TEXT,
+      device_type TEXT NOT NULL DEFAULT 'mobile',
+      is_host INTEGER DEFAULT 0,
+      last_seen TEXT,
+      capabilities TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS device_pairings (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      requested_by TEXT,
+      approved_by TEXT,
+      approved_at TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id),
+      FOREIGN KEY (device_id) REFERENCES devices(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_events (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      sequence_number INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      timestamp TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      variant_name TEXT,
+      type TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      created_by TEXT,
+      device_id TEXT,
+      reference_id TEXT,
+      reason TEXT,
+      timestamp TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      employee_id TEXT,
+      device_id TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      reason TEXT,
+      timestamp TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sync_events_shop_seq
+      ON sync_events(shop_id, sequence_number);
+    CREATE INDEX IF NOT EXISTS idx_sync_events_device
+      ON sync_events(device_id);
+    CREATE INDEX IF NOT EXISTS idx_invitations_code
+      ON invitations(code);
+    CREATE INDEX IF NOT EXISTS idx_device_pairings_shop
+      ON device_pairings(shop_id, status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_transactions_product
+      ON inventory_transactions(product_id, timestamp);
+  `)
+
+  // ── Seed rows ────────────────────────────────────────────────────────────
   await db.execAsync(`INSERT OR IGNORE INTO shop_settings (id) VALUES ('default')`)
 
-  // Migrate: add enabled_payment_channels column if it doesn't exist (existing installs)
-  try {
-    await db.execAsync(`ALTER TABLE shop_settings ADD COLUMN enabled_payment_channels TEXT`)
-  } catch {
-    // Column already exists — ignore
-  }
+  // ── Safe-column migrations (existing installs) ───────────────────────────
+  await migrateAddColumn(db, 'shop_settings', 'enabled_payment_channels', 'TEXT')
+  await migrateAddColumn(db, 'shop_settings', 'biometric_enabled', 'INTEGER DEFAULT 0')
+  // Sales table needs shop_id, employee_id, device_id for multi-terminal sync
+  await migrateAddColumn(db, 'sales', 'shop_id', 'TEXT')
+  await migrateAddColumn(db, 'sales', 'employee_id', 'TEXT')
+  await migrateAddColumn(db, 'sales', 'device_id', 'TEXT')
+  // Products needs current_stock as canonical stock cache (inventory_transactions is the truth)
+  await migrateAddColumn(db, 'products', 'current_stock', 'INTEGER DEFAULT 0')
+}
 
-  // Migrate: add biometric_enabled column if it doesn't exist (existing installs)
+async function migrateAddColumn(
+  db: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  type: string,
+): Promise<void> {
   try {
-    await db.execAsync(`ALTER TABLE shop_settings ADD COLUMN biometric_enabled INTEGER DEFAULT 0`)
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
   } catch {
     // Column already exists — ignore
   }

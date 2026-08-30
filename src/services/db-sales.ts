@@ -6,6 +6,7 @@ import type { Sale, SaleItem, CartItem, HeldSale } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapSaleRow } from './db-sales-mapper'
+import { recordInventoryTransaction } from './db-inventory-transactions'
 
 export class InsufficientStockError extends Error {
   constructor(public productName: string, public requested: number, public available: number) {
@@ -46,6 +47,50 @@ export async function createSale(
   for (const item of items) {
     const itemId = generateId()
         await db.runAsync(
+      `INSERT INTO sale_items (id, sale_id, product_id, variation_name, product_name, quantity, unit_price, discount, total_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [itemId, id, item.productId, item.variationName || null, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
+    )
+    if (!item.variationName) {
+      await db.runAsync(
+        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+        [item.quantity, item.productId]
+      )
+    } else {
+      await db.runAsync(
+        `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
+        [item.quantity, item.productId, item.variationName]
+      )
+    }
+  }
+
+  await queueSync('sales', 'create', id)
+  return (await getSaleById(id))!
+}
+
+// Offline variant: creates sale with pending_offline status (no host confirmation needed)
+export async function createSaleOffline(
+  items: CartItem[],
+  paymentMethod: Sale['paymentMethod'],
+  subtotal: number,
+  discountAmount: number,
+  totalAmount: number,
+): Promise<Sale> {
+  const db = await getDb()
+  const id = generateId()
+  const now = new Date().toISOString()
+  const itemsSummary = `${items.length} item${items.length !== 1 ? 's' : ''}`
+  const itemsJson = JSON.stringify(items)
+
+  await db.runAsync(
+    `INSERT INTO sales (id, type, status, subtotal, discount_amount, total_amount, paid_amount, payment_method, items, items_summary, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, 'retail', 'pending_offline', subtotal, discountAmount, totalAmount, totalAmount, paymentMethod, itemsJson, itemsSummary, now, now]
+  )
+
+  for (const item of items) {
+    const itemId = generateId()
+    await db.runAsync(
       `INSERT INTO sale_items (id, sale_id, product_id, variation_name, product_name, quantity, unit_price, discount, total_price)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, id, item.productId, item.variationName || null, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
@@ -229,4 +274,105 @@ export async function getReceiptHistory(limit = 100): Promise<ReceiptHistoryItem
       : 0,
     itemsSummary: String(row.items_summary || '0 items'),
   }))
+}
+
+// ── Pending sale flow (desktop sync) ──────────────────────────────────────────
+// Mobile calls createPendingSale → desktop confirms with confirmPendingSale
+
+export async function createPendingSale(
+  shopId: string,
+  employeeId: string,
+  deviceId: string,
+  items: Array<{ productId: string; variationName?: string; quantity: number; unitPrice: number; totalPrice: number }>,
+  totalAmount: number,
+  paymentMethod: string,
+): Promise<Sale> {
+  const db = await getDb()
+  const id = generateId()
+  const now = new Date().toISOString()
+  const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
+  const discountAmount = subtotal - items.reduce((sum, i) => sum + i.totalPrice, 0)
+
+  await db.runAsync(
+    `INSERT INTO sales (id, type, status, subtotal, discount_amount, total_amount, paid_amount, payment_method, shop_id, employee_id, device_id, created_at, updated_at)
+     VALUES (?, 'retail', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, subtotal, discountAmount, totalAmount, totalAmount, paymentMethod, shopId, employeeId, deviceId, now, now]
+  )
+
+  for (const item of items) {
+    await db.runAsync(
+      `INSERT INTO sale_items (id, sale_id, product_id, variation_name, product_name, quantity, unit_price, discount, total_price)
+       SELECT ?, ?, ?, ?, name, ?, ?, 0, ? FROM products WHERE id = ?`,
+      [generateId(), id, item.productId, item.variationName ?? null, item.quantity, item.unitPrice, item.totalPrice, item.productId]
+    )
+  }
+
+  return {
+    id, shopId, employeeId, deviceId,
+    status: 'pending',
+    paymentMethod,
+    subtotal, discountAmount, totalAmount,
+    paidAmount: 0,
+    createdAt: now, updatedAt: now,
+  } as unknown as Sale
+}
+
+export async function confirmPendingSale(saleId: string, employeeId: string): Promise<void> {
+  const db = await getDb()
+  const now = new Date().toISOString()
+
+  const saleRow = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM sales WHERE id = ? AND status = ?', [saleId, 'pending']
+  )
+  if (!saleRow) throw new Error(`Pending sale ${saleId} not found`)
+
+  const itemRows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM sale_items WHERE sale_id = ?', [saleId]
+  )
+
+  for (const item of itemRows) {
+    await recordInventoryTransaction(
+      String(saleRow.shop_id),
+      String(item.product_id),
+      'SALE',
+      Number(item.quantity),
+      employeeId,
+      String(saleRow.device_id),
+      item.variation_name ? String(item.variation_name) : undefined,
+      saleId,
+    )
+  }
+
+  await db.runAsync(
+    `UPDATE sales SET status = 'completed', updated_at = ? WHERE id = ?`,
+    [now, saleId]
+  )
+}
+
+export async function rejectPendingSale(saleId: string): Promise<void> {
+  const db = await getDb()
+  const now = new Date().toISOString()
+  await db.runAsync(
+    `UPDATE sales SET status = 'rejected', updated_at = ? WHERE id = ? AND status = 'pending'`,
+    [now, saleId]
+  )
+}
+
+export async function getPendingSales(shopId: string): Promise<Sale[]> {
+  const db = await getDb()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM sales WHERE shop_id = ? AND status = 'pending' ORDER BY created_at ASC`,
+    [shopId]
+  )
+  return rows.map(r => ({
+    id: String(r.id), shopId: String(r.shop_id), employeeId: String(r.employee_id),
+    deviceId: String(r.device_id), status: 'pending' as Sale['status'],
+    paymentMethod: r.payment_method ? String(r.payment_method) : undefined,
+    subtotal: Number(r.subtotal), discountAmount: Number(r.discount_amount),
+    totalAmount: Number(r.total_amount),
+    paidAmount: Number(r.paid_amount) || 0,
+    customerIdNumber: r.customer_id_number ? String(r.customer_id_number) : undefined,
+    note: r.note ? String(r.note) : undefined,
+    createdAt: String(r.created_at), updatedAt: String(r.updated_at),
+  })) as unknown as Sale[]
 }

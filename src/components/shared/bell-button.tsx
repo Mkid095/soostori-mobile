@@ -22,7 +22,7 @@ export function BellButton() {
   }, [load])
 
   return (
-    <TouchableOpacity style={s.btn} onPress={() => router.push('/(tabs)/notifications')} activeOpacity={0.7}>
+    <TouchableOpacity style={s.btn} onPress={() => router.push('/(tabs)/notifications' as any)} activeOpacity={0.7}>
       <Bell size={17} color={unread > 0 ? brand : text} />
       {unread > 0 && (
         <View style={[s.badge, { backgroundColor: brand }]}>

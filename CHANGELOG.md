@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Multi-terminal LAN Sync (desktop-agent)
+- **New file** `src/lib/sync-protocol.ts` — shared contract between desktop and mobile; exports all SyncEventType, Shop, Employee, Invitation, Device, DevicePairing, SyncEvent, InventoryTransaction, Sale, SaleItem, AuditLog types plus payload types
+- **Schema update** `src/lib/db-schema.ts` — added shops, employees, invitations, devices, device_pairings, sync_events, inventory_transactions, audit_logs tables with indexes; migrated sales table with shop_id/employee_id/device_id columns
+- **Types** `src/lib/types.ts` — re-exports team types from sync-protocol; local Sale/SaleItem preserved (different shape)
+- **New services**: `db-shops.ts`, `db-employees.ts` (PBKDF2 100k iterations PIN hashing), `db-devices.ts`, `db-pairings.ts`, `db-audit.ts`, `db-inventory-transactions.ts` (writes transactions + updates products.stock_quantity cache), `sync-emitter.ts` (monotonic sequence numbers per shop)
+- **Sale flow** `src/services/db-sales.ts` — `createPendingSale()` → `confirmPendingSale()` / `rejectPendingSale()` for SALE_PENDING → confirm/reject; `getPendingSales()` for pending queue
+- **LAN server** `src/services/lan-server.ts` — WebSocket + HTTP on port 18792; /ws WebSocket path, /api/pair for pairing; desktop-only (ts-nocheck)
+- **New hooks**: `useEmployee.ts` (login/logout with PIN, AsyncStorage session), `useLanSync.ts` (LAN client state via lan-client), `usePairings.ts` (pending pairing requests)
+- **New UI components**: `team-section.tsx` (employee list + add modal), `lan-sync-section.tsx` (mobile: shows connection state + Join Shop button), `pairing-requests-sheet.tsx` (desktop: approve/reject pairing)
+- **AppMenu** `app-menu-nav.tsx` — role-filtered nav items via `useFilteredMenuItemsWithRole()`
+- **db.ts** — seeds default shop row; resetDb drops new tables
+
 ### Receipt History + Reprint
 - **New screen** `app/(tabs)/receipts.tsx` — lists all completed sales with date, receipt number, total, payment method
 - Tap a row to open `ReceiptView` modal with full receipt preview

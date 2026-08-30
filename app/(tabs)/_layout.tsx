@@ -1,4 +1,5 @@
 // app/(tabs)/_layout.tsx — Tab navigator + bottom tab bar + app menu
+// All screens are registered here; BottomTabBar filters visible tabs by employee role
 import { Tabs } from 'expo-router'
 import React from 'react'
 import { BottomTabBar } from '../../src/components/bottom-tab-bar/bottom-tab-bar'
@@ -13,6 +14,17 @@ export default function TabsLayout() {
           tabBarStyle: { display: 'none' },
         }}
       >
+        {/* ── Role-based tabs (visible tabs filtered in BottomTabBar) */}
+        <Tabs.Screen name="sell" />
+        <Tabs.Screen name="customers" />
+        <Tabs.Screen name="receipts" />
+        <Tabs.Screen name="scan" />
+        <Tabs.Screen name="stock" />
+        <Tabs.Screen name="receive" />
+        <Tabs.Screen name="dashboard" />
+        <Tabs.Screen name="approvals" />
+
+        {/* ── Shared / existing tabs */}
         <Tabs.Screen name="pos" />
         <Tabs.Screen name="inventory" />
         <Tabs.Screen name="low-stock" />
@@ -24,9 +36,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="notifications" />
         <Tabs.Screen name="support" />
         <Tabs.Screen name="settings" />
-        <Tabs.Screen name="receipts" />
       </Tabs>
-      {/* AppMenu rendered ABOVE BottomTabBar in the same parent — zIndex/elevation now works */}
       <AppMenu />
       <BottomTabBar />
     </>

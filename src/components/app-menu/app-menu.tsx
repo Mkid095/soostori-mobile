@@ -24,7 +24,7 @@ import { useMenu } from '../../hooks/MenuContext'
 import { getPendingSyncCount } from '../../services/sync-queue-helper'
 import { TAB_BAR_HEIGHT } from '../bottom-tab-bar/bottom-tab-bar.styles'
 import { makeStyles } from './app-menu.styles'
-import { MENU_ITEMS } from './app-menu-nav'
+import { ALL_MENU_ITEMS } from './app-menu-nav'
 import { AppMenuItem } from './app-menu-item'
 
 const { height: SCREEN_H } = Dimensions.get('window')
@@ -151,7 +151,7 @@ export function AppMenu() {
 
         {/* Nav items */}
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          {MENU_ITEMS.map((item) => (
+          {ALL_MENU_ITEMS.map((item) => (
             <AppMenuItem
               key={item.href}
               label={item.label}

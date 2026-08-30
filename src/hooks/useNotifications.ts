@@ -17,7 +17,7 @@ export function useNotifications() {
 
   const notifications = useQuery<AppNotification[]>({
     queryKey: ['notifications'],
-    queryFn: getNotifications,
+    queryFn: () => getNotifications(),
   })
 
   const unreadCount = useQuery<number>({

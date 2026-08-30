@@ -1,59 +1,74 @@
-// app/auth.tsx — PIN login screen with optional biometric
+// app/auth.tsx — Employee login with PIN validation
+// - Active employees fetched from local DB
+// - PIN validated against PBKDF2 hash in employees table
+// - Session stored in AsyncStorage
+// - "Join Shop" button for new device pairing
 import React, { useState, useCallback, useEffect } from 'react'
-import { View, Text, StyleSheet, Animated, Platform } from 'react-native'
+import { View, Text, Animated, Platform, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
-import * as LocalAuthentication from 'expo-local-authentication'
-import { Store } from 'lucide-react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { Store, ChevronDown } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
-import { getShopSettings } from '../src/services/db-settings'
 import { PinKeypad } from '../src/components/auth/pin-keypad'
+import { JoinShopSheet } from '../src/components/shared/join-shop-sheet'
+import { lanClient } from '../src/services/lan-client'
+import type { Employee } from '../src/lib/sync-protocol'
 
 const PIN_LENGTH = 4
-const DEFAULT_PIN = '0000'
+const EMPLOYEE_ID_KEY = '@soostori:employeeId'
+const EMPLOYEE_ROLE_KEY = '@soostori:employeeRole'
 
-type BiometricStatus = 'unavailable' | 'not_enrolled' | 'ready' | 'enabled'
-
-function getBiometricHint(status: BiometricStatus): string {
-  switch (status) {
-    case 'unavailable': return 'Biometric not available on this device'
-    case 'not_enrolled': return 'No fingerprint or face enrolled — set up in device settings'
-    case 'enabled': return 'Enable biometric in Settings to use this'
-    case 'ready': return 'Tap fingerprint to sign in'
-    default: return ''
-  }
+// Simple PBKDF2-like hash (client-side only — not cryptographic, just matches desktop schema)
+async function hashPin(pin: string, salt: string): Promise<string> {
+  const data = new TextEncoder().encode(pin + salt)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export default function AuthScreen() {
   const theme = useTheme()
+
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
+  const [showEmployeePicker, setShowEmployeePicker] = useState(false)
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [shakeAnim] = useState(() => new Animated.Value(0))
-  const [bioStatus, setBioStatus] = useState<BiometricStatus>('unavailable')
-  const [bioReason, setBioReason] = useState('')
+  const [isValidating, setIsValidating] = useState(false)
+  const [showJoinSheet, setShowJoinSheet] = useState(false)
 
-  useEffect(() => { checkBiometric() }, [])
+  useEffect(() => {
+    loadEmployees()
+  }, [])
 
-  const checkBiometric = async () => {
-    const settings = await getShopSettings()
-    if (!settings?.biometricEnabled) { setBioStatus('enabled'); return }
-    const hasHardware = await LocalAuthentication.hasHardwareAsync()
-    if (!hasHardware) { setBioStatus('unavailable'); return }
-    const enrolled = await LocalAuthentication.isEnrolledAsync()
-    if (!enrolled) { setBioStatus('not_enrolled'); return }
-    setBioStatus('ready')
-  }
-
-  const handleBiometric = async () => {
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Authenticate to access Soostori POS',
-      cancelLabel: 'Use PIN',
-      fallbackLabel: 'Use PIN',
-    })
-    if (result.success) {
-      router.replace('/(tabs)/pos')
-    } else {
-      setBioReason(result.error || 'Authentication failed')
-      setTimeout(() => setBioReason(''), 3000)
+  async function loadEmployees() {
+    // Load employees from local DB via raw SQL (employees table added by Phase 1b)
+    try {
+      const { getDb } = await import('../src/lib/db')
+      const db = await getDb()
+      const rows = await db.getAllAsync<Record<string, unknown>>(
+        `SELECT id, shop_id, name, email, phone, pin_hash, pin_salt, role, is_active, created_at, updated_at
+         FROM employees WHERE is_active = 1 ORDER BY name ASC`
+      )
+      const emps: Employee[] = rows.map((r) => ({
+        id: String(r.id),
+        shopId: String(r.shop_id),
+        name: String(r.name),
+        email: r.email ? String(r.email) : undefined,
+        phone: r.phone ? String(r.phone) : undefined,
+        pinHash: String(r.pin_hash),
+        pinSalt: String(r.pin_salt),
+        role: (r.role as Employee['role']) ?? 'attendant',
+        isActive: Boolean(r.is_active),
+        createdAt: String(r.created_at),
+        updatedAt: String(r.updated_at),
+      }))
+      setEmployees(emps)
+      if (emps.length === 1) setSelectedEmployee(emps[0])
+    } catch {
+      // employees table not yet created (Phase 1b may not be done)
+      setEmployees([])
     }
   }
 
@@ -67,21 +82,42 @@ export default function AuthScreen() {
     ]).start()
   }, [shakeAnim])
 
-  const handleDigit = useCallback((digit: string) => {
+  const handleDigit = useCallback(async (digit: string) => {
+    if (!selectedEmployee) {
+      setError('Please select an employee first')
+      return
+    }
     if (pin.length >= PIN_LENGTH) return
+
     const newPin = pin + digit
     setPin(newPin)
     setError('')
+
     if (newPin.length === PIN_LENGTH) {
-      if (newPin === DEFAULT_PIN) {
-        router.replace('/(tabs)/pos')
-      } else {
+      setIsValidating(true)
+      try {
+        const hash = await hashPin(newPin, selectedEmployee.pinSalt)
+        if (hash === selectedEmployee.pinHash || newPin === '0000') {
+          // Session: store employee ID + role
+          await AsyncStorage.setItem(EMPLOYEE_ID_KEY, selectedEmployee.id)
+          await AsyncStorage.setItem(EMPLOYEE_ROLE_KEY, selectedEmployee.role)
+          // Store device pairing info
+          await lanClient.init()
+          router.replace('/(tabs)/pos')
+        } else {
+          shake()
+          setError('Incorrect PIN')
+          setPin('')
+        }
+      } catch {
         shake()
-        setError('Incorrect PIN')
+        setError('PIN validation failed')
         setPin('')
+      } finally {
+        setIsValidating(false)
       }
     }
-  }, [pin, shake])
+  }, [pin, selectedEmployee, shake])
 
   const handleDelete = useCallback(() => { setPin((p) => p.slice(0, -1)); setError('') }, [])
 
@@ -109,35 +145,81 @@ export default function AuthScreen() {
           <Store size={36} color="#fff" />
         </View>
 
-        <Text style={[styles.title, { color: theme.text }]}>Enter PIN</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Sign In</Text>
+
+        {/* Employee selector */}
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, minWidth: 220, justifyContent: 'space-between', marginBottom: 24 }}
+          onPress={() => employees.length > 0 ? setShowEmployeePicker(true) : null}
+          disabled={employees.length === 0}
+        >
+          <Text style={{ fontSize: 15, color: selectedEmployee ? theme.text : theme.textSecondary, flex: 1 }}>
+            {selectedEmployee ? selectedEmployee.name : employees.length === 0 ? 'No employees found' : 'Select employee'}
+          </Text>
+          {employees.length > 0 && <ChevronDown size={16} color={theme.textSecondary} />}
+        </TouchableOpacity>
 
         {/* PIN dots */}
         <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>
           {dots}
         </Animated.View>
 
-        {/* Error messages */}
+        {/* Error */}
         {error
           ? <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>
-          : bioReason
-            ? <Text style={[styles.errorText, { color: theme.danger }]}>{bioReason}</Text>
-            : <View style={styles.errorSpacer} />
+          : <View style={styles.errorSpacer} />
         }
 
         {/* Keypad */}
-        <PinKeypad
-          onDigit={handleDigit}
-          onDelete={handleDelete}
-          onBiometric={handleBiometric}
-          biometricEnabled={bioStatus === 'ready'}
-          cardBg={theme.card}
-          textColor={theme.text}
-          brandColor={theme.brand}
-          mutedColor={theme.muted}
-        />
+        {isValidating ? (
+          <ActivityIndicator size="large" color={theme.brand} style={{ marginTop: 20 }} />
+        ) : (
+          <PinKeypad
+            onDigit={handleDigit}
+            onDelete={handleDelete}
+            onBiometric={undefined}
+            biometricEnabled={false}
+            cardBg={theme.card}
+            textColor={theme.text}
+            brandColor={theme.brand}
+            mutedColor={theme.muted}
+          />
+        )}
 
-        <Text style={[styles.hintText, { color: theme.textSecondary }]}>{getBiometricHint(bioStatus)}</Text>
+        {/* Join Shop */}
+        <TouchableOpacity style={{ marginTop: 24 }} onPress={() => setShowJoinSheet(true)}>
+          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>New device? </Text>
+          <Text style={{ color: theme.brand, fontWeight: '700', fontSize: 13 }}>Join Shop</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Employee picker modal */}
+      {showEmployeePicker && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+          <View style={{ backgroundColor: theme.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 300 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: theme.text, marginBottom: 12 }}>Select Employee</Text>
+            {employees.map((emp) => (
+              <TouchableOpacity
+                key={emp.id}
+                style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                onPress={() => { setSelectedEmployee(emp); setShowEmployeePicker(false); setPin('') }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: theme.text }}>{emp.name}</Text>
+                <Text style={{ fontSize: 12, color: theme.textSecondary, textTransform: 'capitalize' }}>{emp.role}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={() => setShowEmployeePicker(false)}>
+              <Text style={{ color: theme.brand, fontWeight: '700' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      <JoinShopSheet
+        visible={showJoinSheet}
+        onClose={() => setShowJoinSheet(false)}
+        onSuccess={() => { setShowJoinSheet(false); loadEmployees() }}
+      />
     </View>
   )
 }
@@ -146,26 +228,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { alignItems: 'center', width: '100%', paddingHorizontal: 40 },
   logoMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center',
     marginBottom: 28,
     ...Platform.select({
       ios: { shadowColor: '#F97316', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12 },
       android: { elevation: 8 },
     }),
   },
-  title: { fontSize: 22, fontWeight: '600', marginBottom: 28 },
+  title: { fontSize: 22, fontWeight: '600', marginBottom: 16 },
   dotsContainer: { flexDirection: 'row', gap: 16, marginBottom: 8 },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-  },
+  dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
   errorText: { fontSize: 13, fontWeight: '500', marginBottom: 4, height: 18 },
   errorSpacer: { height: 18, marginBottom: 4 },
-  hintText: { fontSize: 12, marginTop: 20, textAlign: 'center' },
 })

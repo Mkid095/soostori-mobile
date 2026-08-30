@@ -4,6 +4,9 @@
 import * as SQLite from 'expo-sqlite'
 import { initSchema } from './db-schema'
 import { seedExpenseCategories } from './db-expense-seed'
+import { generateId } from './formatters'
+
+const DEFAULT_SHOP_ID = 'shop-default'
 
 let db: SQLite.SQLiteDatabase | null = null
 
@@ -31,6 +34,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_number', 'TEXT')
   await addColumnIfNotExists(db, 'shop_settings', 'bank_paybill_account', 'TEXT')
   await addColumnIfNotExists(db, 'shop_settings', 'mpesa_pochi_phone', 'TEXT')
+  // Seed default shop row (idempotent)
+  await db.runAsync(
+    `INSERT OR IGNORE INTO shops (id, name) VALUES (?, ?)`,
+    [DEFAULT_SHOP_ID, 'My Shop']
+  )
   return db
 }
 
@@ -50,6 +58,16 @@ export async function resetDb(): Promise<void> {
     DROP TABLE IF EXISTS app_settings;
     DROP TABLE IF EXISTS expense_categories;
     DROP TABLE IF EXISTS expenses;
+    DROP TABLE IF EXISTS notifications;
+    DROP TABLE IF EXISTS product_variants;
+    DROP TABLE IF EXISTS shops;
+    DROP TABLE IF EXISTS employees;
+    DROP TABLE IF EXISTS invitations;
+    DROP TABLE IF EXISTS devices;
+    DROP TABLE IF EXISTS device_pairings;
+    DROP TABLE IF EXISTS sync_events;
+    DROP TABLE IF EXISTS inventory_transactions;
+    DROP TABLE IF EXISTS audit_logs;
   `)
   await initSchema(database)
   await seedExpenseCategories(database)
