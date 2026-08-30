@@ -176,3 +176,39 @@ export interface SyncQueueItem {
   createdAt: number
   syncedAt?: number
 }
+
+// ─── Clients ─────────────────────────────────────────────────────────────────
+
+export interface Client {
+  id: string
+  name: string
+  phone?: string
+  idNumber?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Expenses ─────────────────────────────────────────────────────────────────
+
+export interface ExpenseCategory {
+  id: string
+  name: string
+  color: string
+  icon: string
+  isActive: boolean
+  createdAt: string
+}
+
+export interface Expense {
+  id: string
+  categoryId?: string
+  categoryName?: string
+  categoryColor?: string
+  amount: number
+  description?: string
+  reference?: string
+  date: string
+  createdAt: string
+  updatedAt: string
+}

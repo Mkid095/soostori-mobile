@@ -166,6 +166,26 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       last_login_date TEXT,
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#6B7280',
+      icon TEXT DEFAULT 'receipt',
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS expenses (
+      id TEXT PRIMARY KEY,
+      category_id TEXT,
+      amount REAL NOT NULL,
+      description TEXT,
+      reference TEXT,
+      date TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `)
 
   // Seed default shop_settings row (idempotent — INSERT OR IGNORE)

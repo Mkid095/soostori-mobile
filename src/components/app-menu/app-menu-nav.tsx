@@ -7,6 +7,7 @@ import {
   Users,
   Settings,
   Receipt,
+  UserCircle,
 } from 'lucide-react-native'
 
 export interface NavItem {
@@ -16,10 +17,12 @@ export interface NavItem {
 }
 
 export const MENU_ITEMS: NavItem[] = [
-  { label: 'Point of Sale',   href: '/(tabs)/pos',       icon: <ShoppingCart size={22} /> },
-  { label: 'Inventory',       href: '/(tabs)/inventory',  icon: <Package size={22} /> },
-  { label: 'Sales Reports',  href: '/(tabs)/reports',    icon: <BarChart3 size={22} /> },
-  { label: 'Receipt History', href: '/(tabs)/receipts',  icon: <Receipt size={22} /> },
+  { label: 'Point of Sale',    href: '/(tabs)/pos',        icon: <ShoppingCart size={22} /> },
+  { label: 'Inventory',        href: '/(tabs)/inventory',  icon: <Package size={22} /> },
+  { label: 'Sales Reports',    href: '/(tabs)/reports',    icon: <BarChart3 size={22} /> },
+  { label: 'Receipt History', href: '/(tabs)/receipts',   icon: <Receipt size={22} /> },
   { label: 'Debt Management', href: '/(tabs)/debt',      icon: <Users size={22} /> },
-  { label: 'Settings',        href: '/(tabs)/settings',   icon: <Settings size={22} /> },
+  { label: 'Clients',         href: '/(tabs)/clients',   icon: <UserCircle size={22} /> },
+  { label: 'Expenses',        href: '/(tabs)/expenses',  icon: <Receipt size={22} /> },
+  { label: 'Settings',        href: '/(tabs)/settings',  icon: <Settings size={22} /> },
 ]
