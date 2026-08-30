@@ -4,27 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Architecture v4 — Mobile-First, Cloud-Integrated
-- **Full architecture rewrite** — docs/ARCHITECTURE.md updated to v4
-- Mobile is now **first-class client** — can operate shop without desktop
-- **Three operating modes**: Mobile-only / Mobile+Desktop / Desktop-centric
-- **Two sync layers**: Cloud (HTTPS) + Local LAN (Wi-Fi/WebSocket)
-- Desktop remains preferred local host when present, but is **never mandatory**
-- Cloud contract defined (Phase 0): entities, API endpoints, auth/subscription/entitlement model
-- **No AI visual vocabulary** rule enforced — Lucide icons only, ✨ reserved for AI features
-- Phase 1 (mobile hardening): 10 items completed (see below)
-- Phase 2 (cloud identity), Phase 3 (cloud sync), Phase 4 (recovery) defined but blocked on Phase 0 contract
+### Phase 3 — Conflict Handling
+- **db-conflicts.ts enhanced**: `resolveConflict` now supports PARTIAL_FULFILL/CANCEL/ESCALATE; `applyPartialFulfillment` for partial inventory restoration
 
-### Phase 1 — Mobile Hardening (All Complete)
-- **Removed 0000 PIN bypass**: auth.tsx now uses `verifyPin()` from db-employees.ts (PBKDF2 100k) instead of weak SHA-256 hash + backdoor
-- **Secure device identity**: `generateSecureId()` added to formatters.ts using `crypto.getRandomValues`; lan-client.ts now uses it for device ID
-- **Idempotent LAN events**: `applySaleConfirmed`/`applySaleRejected` now check `status !== 'confirmed'/'rejected'` before applying to prevent double-deduction
-- **Inventory event sourcing on remote sales**: `applySaleConfirmed` now calls `recordInventoryTransaction` for proper event sourcing instead of raw SQL
-- **HOST_HEARTBEAT wired**: lan-client.ts handles `HOST_HEARTBEAT` events and exposes `lastHeartbeat`; useLanSync hook tracks host availability (30s timeout)
-- **SALE_RECONCILIATION_REQUIRED handled**: lan-client.ts stores conflicts in `sync_conflicts` table; approvals.tsx now shows conflict resolution panel (Partial Fulfill / Cancel)
-- **LAN status UI**: sell.tsx shows connection banner (green=LAN connected, yellow=reconnecting/offline); useLanSync exposes `isConnected`, `isHostAvailable`, `lastHeartbeat`
-- **Audit logging added**: `logAudit` calls added to `createEmployee`, `updateEmployeePin`, `updateProduct` (price changes), `adjustStock`, `createSale`
-- **Schema versioning**: `schema_versions` table added; `db.ts` now uses version-based migrations with `runMigrations()`; `CURRENT_SCHEMA_VERSION = 1`
+### Phase 4 — Device Recovery
+- **cloud-snapshot.ts**: `cloudDownloadSnapshot`, `cloudUploadSnapshot`, `cloudRequestDeviceRecovery` stubs
+- **db-device-recovery.ts**: `exportLocalSnapshot`, `importCloudSnapshot`, `isNewDevice`, `clearDeviceIdentity`
+- **New device recovery**: app prompts to restore from cloud on first login after reinstall
+- **Retry with backoff**: failed sync events retry 3x (1min, 5min, 15min) before marking failed
 
 ### Multi-terminal LAN Sync — Critical Fixes
 - **Inventory event sourcing fixed**: `createSale`, `createSaleOffline`, `adjustStock` now use `recordInventoryTransaction` (writes inventory_transactions + updates current_stock cache) instead of raw SQL stock deduction

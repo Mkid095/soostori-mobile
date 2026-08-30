@@ -156,7 +156,9 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       payload TEXT NOT NULL,
       status TEXT DEFAULT 'pending',
       created_at INTEGER NOT NULL,
-      synced_at INTEGER
+      synced_at INTEGER,
+      retry_count INTEGER DEFAULT 0,
+      retry_at INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -345,30 +347,10 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_sync_conflicts_shop
       ON sync_conflicts(shop_id, status);
-
-    CREATE TABLE IF NOT EXISTS schema_versions (
-      version INTEGER PRIMARY KEY,
-      applied_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS sync_state (
-      id TEXT PRIMARY KEY DEFAULT 'default',
-      shop_id TEXT NOT NULL,
-      device_id TEXT,
-      cloud_device_id TEXT,
-      last_cloud_sync_at TEXT,
-      last_sequence_number INTEGER DEFAULT 0,
-      pending_upload_count INTEGER DEFAULT 0,
-      cloud_entitlement_status TEXT,
-      entitlement_verified_at TEXT,
-      entitlement_expires_at TEXT,
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
   `)
 
   // ── Seed rows ────────────────────────────────────────────────────────────
   await db.execAsync(`INSERT OR IGNORE INTO shop_settings (id) VALUES ('default')`)
-  await db.execAsync(`INSERT OR IGNORE INTO sync_state (id, shop_id) VALUES ('default', 'shop-default')`)
 
   // ── Safe-column migrations (existing installs) ───────────────────────────
   await migrateAddColumn(db, 'shop_settings', 'enabled_payment_channels', 'TEXT')

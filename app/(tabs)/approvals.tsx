@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { View, Text, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Smartphone, Check, X, Wifi, AlertTriangle } from 'lucide-react-native'
+import { Smartphone, Check, X, Wifi, AlertTriangle, Activity } from 'lucide-react-native'
 import { useTheme } from '../../src/hooks/useTheme'
 import { AppHeader } from '../../src/components/shared/app-header'
 import type { SyncConflict, SaleReconciliationRequiredPayload } from '../../src/lib/sync-protocol'
@@ -53,15 +53,23 @@ async function rejectPairing(id: string): Promise<void> {
   await db.runAsync(`UPDATE device_pairings SET status = 'rejected' WHERE id = ?`, [id])
 }
 
-async function resolveConflict(conflictId: string, resolution: string): Promise<void> {
-  const { resolveConflict } = await import('../../src/services/db-conflicts')
-  await resolveConflict(conflictId, resolution, 'owner')
+async function resolveConflict(
+  conflictId: string,
+  resolution: 'PARTIAL_FULFILL' | 'CANCEL',
+  partialQuantities?: Record<string, number>,
+): Promise<void> {
+  const { resolveConflict: dbResolve, applyPartialFulfillment } = await import('../../src/services/db-conflicts')
+  await dbResolve(conflictId, resolution, 'owner', partialQuantities)
+  if (resolution === 'PARTIAL_FULFILL' && partialQuantities) {
+    await applyPartialFulfillment(conflictId, partialQuantities)
+  }
 }
 
 export default function ApprovalsScreen() {
   const { bg, card, text, textSecondary: textMuted, border, brand, success, danger, warning } = useTheme()
   const [pending, setPending] = useState<PendingPairing[]>([])
   const [conflicts, setConflicts] = useState<SyncConflict[]>([])
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadPendingPairings().then(setPending)
@@ -88,11 +96,33 @@ export default function ApprovalsScreen() {
   }
 
   async function handleResolve(conflict: SyncConflict, action: 'partial_fulfill' | 'cancel') {
-    const resolution = action === 'partial_fulfill'
-      ? 'PARTIAL_FULFILL'
-      : 'CANCEL'
-    await resolveConflict(conflict.id, resolution)
-    setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
+    setResolvingId(conflict.id)
+    try {
+      if (action === 'partial_fulfill') {
+        // Parse payload to get available quantities
+        let payload: SaleReconciliationRequiredPayload | null = null
+        try {
+          payload = JSON.parse(conflict.originalPayload)
+        } catch { /* ignore */ }
+        // Build partial quantities from available stock
+        const partialQuantities: Record<string, number> = {}
+        if (payload?.items) {
+          for (const item of payload.items) {
+            partialQuantities[item.productId] = item.availableQty
+          }
+        }
+        await resolveConflict(conflict.id, 'PARTIAL_FULFILL', partialQuantities)
+        Alert.alert('Partial Fulfillment', 'Inventory restored for available stock.')
+      } else {
+        await resolveConflict(conflict.id, 'CANCEL')
+        Alert.alert('Sale Cancelled', 'The conflicting sale has been cancelled.')
+      }
+      setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
+    } catch {
+      Alert.alert('Error', 'Failed to resolve conflict.')
+    } finally {
+      setResolvingId(null)
+    }
   }
 
   function renderConflictItem(conflict: SyncConflict) {
@@ -100,6 +130,7 @@ export default function ApprovalsScreen() {
     try {
       payload = JSON.parse(conflict.originalPayload)
     } catch { /* ignore */ }
+    const isResolving = resolvingId === conflict.id
 
     return (
       <View key={conflict.id} style={{ backgroundColor: card, borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: border }}>
@@ -130,17 +161,19 @@ export default function ApprovalsScreen() {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: danger, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            style={{ flex: 1, backgroundColor: danger, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: isResolving ? 0.6 : 1 }}
             onPress={() => handleResolve(conflict, 'cancel')}
+            disabled={isResolving}
           >
-            <X size={16} color="#fff" />
+            {isResolving ? <Activity size={16} color="#fff" /> : <X size={16} color="#fff" />}
             <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Cancel Sale</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: brand, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            style={{ flex: 1, backgroundColor: brand, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: isResolving ? 0.6 : 1 }}
             onPress={() => handleResolve(conflict, 'partial_fulfill')}
+            disabled={isResolving}
           >
-            <Check size={16} color="#fff" />
+            {isResolving ? <Activity size={16} color="#fff" /> : <Check size={16} color="#fff" />}
             <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Partial Fulfill</Text>
           </TouchableOpacity>
         </View>

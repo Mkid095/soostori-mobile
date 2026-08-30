@@ -1,16 +1,19 @@
-// app/_layout.tsx — Root layout with auth gate
+// app/_layout.tsx — Root layout with auth gate + device recovery
 import { useEffect, useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { View, Text, ActivityIndicator } from 'react-native'
+import { View, Text, ActivityIndicator, Alert } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { getDb } from '../src/lib/db'
 import { getQueryClient } from '../src/lib/query-client'
 import { ThemeProvider } from '../src/hooks/useTheme'
 import { MenuProvider } from '../src/hooks/MenuContext'
-import { isWithinGraceWindow, getCachedEntitlement } from '../src/services/entitlement-cache'
+import { isWithinGraceWindow } from '../src/services/entitlement-cache'
+import { isNewDevice, importCloudSnapshot } from '../src/services/db-device-recovery'
+import { cloudDownloadSnapshot } from '../src/services/cloud-snapshot'
 
+const FIRST_RUN_KEY = '@soostori:firstRun'
 const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
@@ -29,18 +32,54 @@ export default function RootLayout() {
           setAuthState('welcome')
           return
         }
-        // Cloud token exists — check grace window
         const withinGrace = await isWithinGraceWindow()
         if (withinGrace) {
           setAuthState('app')
         } else {
-          // Token exists but grace window expired — need to re-verify online
-          // For now, go to auth as fallback (cloud API not defined yet)
           setAuthState('auth')
         }
       })
       .catch((e) => setError(String(e)))
   }, [])
+
+  // Device recovery check after cloud auth succeeds
+  useEffect(() => {
+    if (authState !== 'app') return
+    const checkRecovery = async () => {
+      try {
+        const newDevice = await isNewDevice()
+        if (!newDevice) return
+        let snapshot: Record<string, unknown> | null = null
+        try {
+          snapshot = await cloudDownloadSnapshot('default')
+        } catch {
+          // Cloud API not yet defined — skip recovery
+          return
+        }
+        if (!snapshot) return
+        Alert.alert(
+          'Restore from Cloud',
+          'This device is not registered. Would you like to restore your shop data from the cloud?',
+          [
+            { text: 'Start Fresh', style: 'cancel' },
+            {
+              text: 'Restore',
+              onPress: async () => {
+                try {
+                  await importCloudSnapshot(snapshot!)
+                } catch {
+                  Alert.alert('Recovery Failed', 'Could not restore from cloud. Starting fresh.')
+                }
+              },
+            },
+          ]
+        )
+      } catch {
+        // Recovery check failed silently — proceed normally
+      }
+    }
+    checkRecovery()
+  }, [authState])
 
   if (error) {
     return (

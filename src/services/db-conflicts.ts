@@ -1,7 +1,9 @@
-// Sync conflict CRUD — desktop-agent
+// Sync conflict CRUD + partial fulfillment — Phase 3 conflict handling
 import { getDb } from '../lib/db'
 import type { SyncConflict } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
+
+export type ConflictResolution = 'PARTIAL_FULFILL' | 'CANCEL' | 'ESCALATE'
 
 function mapRow(row: Record<string, unknown>): SyncConflict {
   return {
@@ -47,13 +49,47 @@ export async function getPendingConflicts(shopId: string): Promise<SyncConflict[
 
 export async function resolveConflict(
   conflictId: string,
-  resolution: string,
+  resolution: ConflictResolution,
   resolvedBy: string,
+  partialQuantities?: Record<string, number>,
 ): Promise<void> {
   const db = await getDb()
   const now = new Date().toISOString()
-  await db.runAsync(
-    `UPDATE sync_conflicts SET status = 'resolved', resolution = ?, resolved_by = ?, created_at = ? WHERE id = ?`,
-    [resolution, resolvedBy, now, conflictId]
-  )
+  const resolutionPayload = partialQuantities ? JSON.stringify(partialQuantities) : null
+  if (resolutionPayload) {
+    await db.runAsync(
+      `UPDATE sync_conflicts SET status = 'resolved', resolution = ?, resolved_by = ?, created_at = ? WHERE id = ?`,
+      [`${resolution}:${resolutionPayload}`, resolvedBy, now, conflictId]
+    )
+  } else {
+    await db.runAsync(
+      `UPDATE sync_conflicts SET status = 'resolved', resolution = ?, resolved_by = ?, created_at = ? WHERE id = ?`,
+      [resolution, resolvedBy, now, conflictId]
+    )
+  }
+}
+
+// Apply partial fulfillment to inventory — restores available stock for fulfilled items
+export async function applyPartialFulfillment(
+  conflictId: string,
+  partialQuantities: Record<string, number>,
+): Promise<void> {
+  const db = await getDb()
+  for (const [productId, qty] of Object.entries(partialQuantities)) {
+    if (qty <= 0) continue
+    const row = await db.getFirstAsync<Record<string, unknown>>(
+      'SELECT current_stock FROM products WHERE id = ?', [productId]
+    )
+    const currentStock = row ? Number(row.current_stock) || 0 : 0
+    const newStock = currentStock + qty
+    await db.runAsync(
+      'UPDATE products SET current_stock = ?, updated_at = ? WHERE id = ?',
+      [newStock, new Date().toISOString(), productId]
+    )
+    await db.runAsync(
+      `INSERT INTO inventory_transactions (id, shop_id, product_id, type, quantity, balance_after, reason, timestamp)
+       VALUES (?, 'default', ?, 'ADJUSTMENT', ?, ?, 'Partial fulfillment of conflict ?', ?)`,
+      [generateId(), productId, qty, newStock, conflictId, new Date().toISOString()]
+    )
+  }
 }
