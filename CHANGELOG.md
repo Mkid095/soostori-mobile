@@ -4,10 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Multi-terminal LAN Sync — Critical Fixes
+- **Inventory event sourcing fixed**: `createSale`, `createSaleOffline`, `adjustStock` now use `recordInventoryTransaction` (writes inventory_transactions + updates current_stock cache) instead of raw SQL stock deduction
+- **canSell reads current_stock**: `db-products.canSell()` now reads `products.current_stock` instead of `stock_quantity`
+- **sync_conflicts table**: added `sync_conflicts` table + `db-conflicts.ts` service for offline sale conflict tracking
+- **SALE_RECONCILIATION_REQUIRED event**: added to SyncEventType + SaleReconciliationRequiredPayload + SyncConflict interface in sync-protocol
+- **HOST_HEARTBEAT event**: added to SyncEventType for host liveness monitoring
+- **products.current_stock migration**: added `ALTER TABLE products ADD COLUMN current_stock` to db-schema migrations
+
 ### Multi-terminal LAN Sync (desktop-agent)
-- **New file** `src/lib/sync-protocol.ts` — shared contract between desktop and mobile; exports all SyncEventType, Shop, Employee, Invitation, Device, DevicePairing, SyncEvent, InventoryTransaction, Sale, SaleItem, AuditLog types plus payload types
-- **Schema update** `src/lib/db-schema.ts` — added shops, employees, invitations, devices, device_pairings, sync_events, inventory_transactions, audit_logs tables with indexes; migrated sales table with shop_id/employee_id/device_id columns
-- **Types** `src/lib/types.ts` — re-exports team types from sync-protocol; local Sale/SaleItem preserved (different shape)
 - **New services**: `db-shops.ts`, `db-employees.ts` (PBKDF2 100k iterations PIN hashing), `db-devices.ts`, `db-pairings.ts`, `db-audit.ts`, `db-inventory-transactions.ts` (writes transactions + updates products.stock_quantity cache), `sync-emitter.ts` (monotonic sequence numbers per shop)
 - **Sale flow** `src/services/db-sales.ts` — `createPendingSale()` → `confirmPendingSale()` / `rejectPendingSale()` for SALE_PENDING → confirm/reject; `getPendingSales()` for pending queue
 - **LAN server** `src/services/lan-server.ts` — WebSocket + HTTP on port 18792; /ws WebSocket path, /api/pair for pairing; desktop-only (ts-nocheck)

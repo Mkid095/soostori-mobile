@@ -14,6 +14,7 @@ export type SyncEventType =
   | 'DEVICE_PAIRED'
   | 'DEVICE_DISCONNECTED'
   | 'HOST_TRANSFER'
+  | 'HOST_HEARTBEAT'
 
 export type SaleStatus = 'pending' | 'pending_offline' | 'confirmed' | 'rejected' | 'cancelled'
 export type PairingStatus = 'pending' | 'approved' | 'rejected'
@@ -86,6 +87,13 @@ export interface AuditLog {
   oldValue?: string; newValue?: string; reason?: string; timestamp: string
 }
 
+export interface SyncConflict {
+  id: string; shopId: string; saleId: string; deviceId: string
+  conflictType: string; status: 'pending' | 'resolved'
+  originalPayload: string; resolution?: string; resolvedBy?: string
+  createdAt: string
+}
+
 // Sync payload types
 export interface SalePendingPayload {
   type: 'SALE_PENDING'; saleId: string
@@ -104,10 +112,19 @@ export interface SaleRejectedPayload {
   type: 'SALE_REJECTED'; saleId: string; reason: string; timestamp: string
 }
 
+export interface SaleReconciliationRequiredPayload {
+  type: 'SALE_RECONCILIATION_REQUIRED'
+  saleId: string
+  deviceId: string
+  reason: string
+  items: Array<{ productId: string; productName: string; requestedQty: number; availableQty: number }>
+  timestamp: string
+}
+
 export interface StockUpdatedPayload {
   type: 'STOCK_UPDATED'; productId: string; variantName?: string
   delta: number; newBalance: number; timestamp: string
 }
 
 export type SyncPayload =
-  | SalePendingPayload | SaleConfirmedPayload | SaleRejectedPayload | StockUpdatedPayload
+  | SalePendingPayload | SaleConfirmedPayload | SaleRejectedPayload | SaleReconciliationRequiredPayload | StockUpdatedPayload

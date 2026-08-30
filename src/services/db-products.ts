@@ -5,6 +5,7 @@ import type { Product } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapProductRow } from './db-products-mapper'
+import { recordInventoryTransaction } from './db-inventory-transactions'
 
 export async function getAllProducts(): Promise<Product[]> {
   const db = await getDb()
@@ -125,25 +126,28 @@ export async function getLowStockProducts(): Promise<Product[]> {
 export async function canSell(productId: string, quantity: number): Promise<{ ok: boolean; available: number }> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(
-    'SELECT stock_quantity FROM products WHERE id = ? AND is_active = 1', [productId]
+    'SELECT current_stock FROM products WHERE id = ? AND is_active = 1', [productId]
   )
-  const available = row ? Number(row.stock_quantity) || 0 : 0
+  const available = row ? Number(row.current_stock) || 0 : 0
   return { ok: available >= quantity, available }
 }
 
-export async function adjustStock(productId: string, quantity: number, reason: string): Promise<void> {
-  const db = await getDb()
-  const product = await getProductById(productId)
-  if (!product) return
-
-  const newBalance = product.stockQuantity + quantity
-  const id = generateId()
-  const now = new Date().toISOString()
-
-  await db.runAsync(
-    'INSERT INTO stock_movements (id, product_id, product_name, type, quantity, balance_after, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, productId, product.name, quantity > 0 ? 'purchase' : 'adjustment', quantity, newBalance, reason, now]
+export async function adjustStock(
+  productId: string,
+  quantity: number,
+  reason: string,
+  shopId?: string,
+): Promise<void> {
+  // Use inventory transaction for proper event sourcing + current_stock cache
+  await recordInventoryTransaction(
+    shopId ?? '',
+    productId,
+    quantity > 0 ? 'PURCHASE' : 'ADJUSTMENT',
+    Math.abs(quantity),
+    undefined, // createdBy
+    undefined, // deviceId
+    undefined, // variantName
+    undefined, // referenceId
+    reason,
   )
-  await db.runAsync('UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?', [newBalance, now, productId])
-  await queueSync('stock_movements', 'create', id)
 }

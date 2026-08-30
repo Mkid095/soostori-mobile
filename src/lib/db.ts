@@ -68,6 +68,7 @@ export async function resetDb(): Promise<void> {
     DROP TABLE IF EXISTS sync_events;
     DROP TABLE IF EXISTS inventory_transactions;
     DROP TABLE IF EXISTS audit_logs;
+    DROP TABLE IF EXISTS sync_conflicts;
   `)
   await initSchema(database)
   await seedExpenseCategories(database)

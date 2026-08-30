@@ -46,22 +46,22 @@ export async function createSale(
 
   for (const item of items) {
     const itemId = generateId()
-        await db.runAsync(
+    await db.runAsync(
       `INSERT INTO sale_items (id, sale_id, product_id, variation_name, product_name, quantity, unit_price, discount, total_price)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, id, item.productId, item.variationName || null, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
     )
-    if (!item.variationName) {
-      await db.runAsync(
-        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-        [item.quantity, item.productId]
-      )
-    } else {
-      await db.runAsync(
-        `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
-        [item.quantity, item.productId, item.variationName]
-      )
-    }
+    // Use inventory transaction for proper event sourcing
+    await recordInventoryTransaction(
+      '', // shopId — empty for local-only sales
+      item.productId,
+      'SALE',
+      item.quantity,
+      undefined, // createdBy
+      undefined, // deviceId
+      item.variationName || undefined,
+      id,
+    )
   }
 
   await queueSync('sales', 'create', id)
@@ -95,17 +95,17 @@ export async function createSaleOffline(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, id, item.productId, item.variationName || null, item.productName, item.quantity, item.unitPrice, item.discount, item.totalPrice]
     )
-    if (!item.variationName) {
-      await db.runAsync(
-        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-        [item.quantity, item.productId]
-      )
-    } else {
-      await db.runAsync(
-        `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
-        [item.quantity, item.productId, item.variationName]
-      )
-    }
+    // Use inventory transaction for proper event sourcing + current_stock cache
+    await recordInventoryTransaction(
+      '', // shopId — empty for local-only sales
+      item.productId,
+      'SALE',
+      item.quantity,
+      undefined, // createdBy
+      undefined, // deviceId
+      item.variationName || undefined,
+      id,
+    )
   }
 
   await queueSync('sales', 'create', id)

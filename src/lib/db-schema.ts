@@ -328,6 +328,23 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       ON device_pairings(shop_id, status);
     CREATE INDEX IF NOT EXISTS idx_inventory_transactions_product
       ON inventory_transactions(product_id, timestamp);
+
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      sale_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      conflict_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      original_payload TEXT NOT NULL,
+      resolution TEXT,
+      resolved_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (shop_id) REFERENCES shops(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sync_conflicts_shop
+      ON sync_conflicts(shop_id, status);
   `)
 
   // ── Seed rows ────────────────────────────────────────────────────────────
