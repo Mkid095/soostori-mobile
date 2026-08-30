@@ -122,6 +122,15 @@ export async function getLowStockProducts(): Promise<Product[]> {
   return rows.map(mapProductRow)
 }
 
+export async function canSell(productId: string, quantity: number): Promise<{ ok: boolean; available: number }> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT stock_quantity FROM products WHERE id = ? AND is_active = 1', [productId]
+  )
+  const available = row ? Number(row.stock_quantity) || 0 : 0
+  return { ok: available >= quantity, available }
+}
+
 export async function adjustStock(productId: string, quantity: number, reason: string): Promise<void> {
   const db = await getDb()
   const product = await getProductById(productId)

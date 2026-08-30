@@ -71,7 +71,12 @@ export default function InventoryScreen() {
         onRestock={setRestocking}
         onDelete={setDeletingProduct}
       />
-      <InventoryAddForm visible={showAdd} onClose={() => setShowAdd(false)} onSaved={() => { loadProducts(); setShowAdd(false) }} />
+      <InventoryAddForm
+        visible={showAdd}
+        onClose={() => setShowAdd(false)}
+        onSaved={() => { loadProducts(); setShowAdd(false) }}
+        onSelectSuggestion={(product) => { setShowAdd(false); setEditing(product) }}
+      />
       <InventoryEditForm product={editing} onClose={() => setEditing(null)} onSaved={() => { loadProducts(); setEditing(null) }} />
       <ConfirmModal
         visible={!!deletingProduct}

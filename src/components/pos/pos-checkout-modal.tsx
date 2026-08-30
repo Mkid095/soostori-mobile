@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { View, Text, FlatList, TouchableOpacity, Modal, ScrollView, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type { CartItem, Sale, Product, ShopSettings } from '../../lib/types'
-import { createSale } from '../../services/db-sales'
+import { createSale, InsufficientStockError } from '../../services/db-sales'
 import { buildReceiptData } from '../../services/db-receipts'
 import type { ReceiptData } from '../../services/db-receipts'
 import { formatCurrency } from '../../lib/formatters'
@@ -120,8 +120,12 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
       await createSale(cart, dbMethod, cartTotal, 0, cartTotal)
       const receipt = buildReceiptData(cart, shopSettings, dbMethod)
       setCompletedSale(receipt)
-    } catch {
-      Alert.alert('Error', 'Failed to complete sale')
+    } catch (err) {
+      if (err instanceof InsufficientStockError) {
+        Alert.alert('Insufficient Stock', `Not enough "${err.productName}" in stock. Only ${err.available} available.`)
+      } else {
+        Alert.alert('Error', 'Failed to complete sale')
+      }
     } finally { setIsProcessing(false) }
   }
 
@@ -154,22 +158,31 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
           data={cart}
           keyExtractor={(i) => i.productId}
           contentContainerStyle={{ padding: 12, paddingBottom: 160 }}
-          renderItem={({ item }) => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: card, borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: border }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: '700', color: text, fontSize: 14 }}>{item.productName}</Text>
-                <Text style={{ color: textSecondary, fontSize: 12 }}>{formatCurrency(item.unitPrice)} each</Text>
+          renderItem={({ item }) => {
+            const product = products.find((p) => p.id === item.productId)
+            const stockOk = !product?.trackInventory || item.quantity <= (product?.stockQuantity ?? 0)
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: card, borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: stockOk ? border : '#f59e0b' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: text, fontSize: 14 }}>{item.productName}</Text>
+                  <Text style={{ color: textSecondary, fontSize: 12 }}>{formatCurrency(item.unitPrice)} each</Text>
+                  {!stockOk && (
+                    <Text style={{ color: '#f59e0b', fontSize: 11, fontWeight: '600', marginTop: 2 }}>
+                      Only {product?.stockQuantity ?? 0} in stock
+                    </Text>
+                  )}
+                </View>
+                <TouchableOpacity onPress={() => remove(item.productId)} style={{ backgroundColor: bg, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: text, fontWeight: '700', fontSize: 18 }}>−</Text>
+                </TouchableOpacity>
+                <Text style={{ fontWeight: '800', color: text, fontSize: 16, minWidth: 24, textAlign: 'center' }}>{item.quantity}</Text>
+                <TouchableOpacity onPress={() => add(item.productId)} style={{ backgroundColor: brand, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18 }}>+</Text>
+                </TouchableOpacity>
+                <Text style={{ fontWeight: '800', color: text, fontSize: 15, minWidth: 70, textAlign: 'right' }}>{formatCurrency(item.totalPrice)}</Text>
               </View>
-              <TouchableOpacity onPress={() => remove(item.productId)} style={{ backgroundColor: bg, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: text, fontWeight: '700', fontSize: 18 }}>−</Text>
-              </TouchableOpacity>
-              <Text style={{ fontWeight: '800', color: text, fontSize: 16, minWidth: 24, textAlign: 'center' }}>{item.quantity}</Text>
-              <TouchableOpacity onPress={() => add(item.productId)} style={{ backgroundColor: brand, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18 }}>+</Text>
-              </TouchableOpacity>
-              <Text style={{ fontWeight: '800', color: text, fontSize: 15, minWidth: 70, textAlign: 'right' }}>{formatCurrency(item.totalPrice)}</Text>
-            </View>
-          )}
+            )
+          }}
         />
 
         <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: border, backgroundColor: card, paddingBottom: 32 }}>

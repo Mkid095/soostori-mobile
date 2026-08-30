@@ -1,6 +1,7 @@
 // Shared types and factory for inventory wizard form state
 import type { ProductType } from './inventory-types'
 import type { VariantRow } from './step-variations'
+import type { Product } from '../../lib/types'
 
 export interface GroupPrice {
   name: string; price: string; minQuantity: string
@@ -34,7 +35,8 @@ export interface WizardProps {
   onSaved: () => void
   isEdit?: boolean
   initialForm?: Partial<ProductForm>
-  onSave: (form: ProductForm, variants: VariantRow[]) => Promise<void>
+  onSave: (form: ProductForm, variants?: VariantRow[]) => Promise<void>
+  onSelectSuggestion?: (product: Product) => void
 }
 
 export function makeInit(): ProductForm {
