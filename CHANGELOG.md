@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Receipt History + Reprint
+- **New screen** `app/(tabs)/receipts.tsx` — lists all completed sales with date, receipt number, total, payment method
+- Tap a row to open `ReceiptView` modal with full receipt preview
+- Reprint button triggers printer via expo-print
+- Pull-to-refresh and manual refresh button
+- Added `getReceiptHistory()` to `src/services/db-sales.ts` — returns receipt-style data for completed sales
+- Added `Receipt` to menu nav (`app-menu-nav.tsx`) — accessible via FAB menu
+
+### Barcode Generation
+- **New service** `src/services/db-barcode.ts` — `generateBarcode()` creates unique CODE128-style barcodes
+- `generateBarcode()` uses format `SOO{timestamp-base36}{random}` for uniqueness
+- `isValidBarcode()` and `formatBarcodeDisplay()` utilities included
+- Barcode wizard step already wired to `wizard.generateBarcode` in `useWizardState`
+
 ## [1.1.0] — 2026-08-05
 
 ### Navigation & Bottom Tab Bar

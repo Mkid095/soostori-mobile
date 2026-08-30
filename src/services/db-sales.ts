@@ -165,3 +165,46 @@ export async function deleteHeldSale(id: string): Promise<void> {
   await db.runAsync('DELETE FROM held_sales WHERE id = ?', [id])
   await queueSync('held_sales', 'delete', id)
 }
+
+export interface ReceiptHistoryItem {
+  id: string
+  receiptNumber: string
+  date: string
+  total: number
+  paymentMethod: string
+  itemsCount: number
+  itemsSummary: string
+}
+
+function formatReceiptDate(isoString: string): string {
+  const d = new Date(isoString)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function buildReceiptNumber(id: string): string {
+  return `R${id.slice(-8).toUpperCase()}`
+}
+
+export async function getReceiptHistory(limit = 100): Promise<ReceiptHistoryItem[]> {
+  const db = await getDb()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT id, total_amount, payment_method, items_summary, created_at
+     FROM sales
+     WHERE status = 'completed'
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [limit]
+  )
+  return rows.map((row) => ({
+    id: String(row.id),
+    receiptNumber: buildReceiptNumber(String(row.id)),
+    date: formatReceiptDate(String(row.created_at)),
+    total: Number(row.total_amount) || 0,
+    paymentMethod: String(row.payment_method || 'cash'),
+    itemsCount: row.items_summary
+      ? parseInt(String(row.items_summary).replace(/[^0-9]/g, ''), 10) || 0
+      : 0,
+    itemsSummary: String(row.items_summary || '0 items'),
+  }))
+}
