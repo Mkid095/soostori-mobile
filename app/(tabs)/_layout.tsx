@@ -17,6 +17,8 @@ export default function TabsLayout() {
         <Tabs.Screen name="inventory" />
         <Tabs.Screen name="reports" />
         <Tabs.Screen name="debt" />
+        <Tabs.Screen name="notifications" />
+        <Tabs.Screen name="support" />
         <Tabs.Screen name="settings" />
       </Tabs>
       {/* AppMenu rendered ABOVE BottomTabBar in the same parent — zIndex/elevation now works */}

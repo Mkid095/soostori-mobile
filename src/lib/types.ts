@@ -176,3 +176,13 @@ export interface SyncQueueItem {
   createdAt: number
   syncedAt?: number
 }
+
+export interface AppNotification {
+  id: string
+  type: 'low_stock' | 'debt_due' | 'sync_complete' | 'system' | 'info'
+  title: string
+  body?: string
+  data?: Record<string, unknown>
+  isRead: boolean
+  createdAt: string
+}
