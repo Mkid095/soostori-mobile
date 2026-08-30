@@ -1,66 +1,86 @@
-﻿// app/welcome.tsx — First-run onboarding screen
-import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+// app/welcome.tsx — Online-first authentication screen
+import React, { useState } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 import { router } from 'expo-router'
-import { Store, Check } from 'lucide-react-native'
+import { Store, LogIn, Users } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
+import { LoginForm } from '../src/components/auth/login-form'
+import { JoinShopForm } from '../src/components/auth/join-shop-form'
 
-const FIRST_RUN_KEY = '@soostori:firstRun'
-
-const FEATURES = [
-  'Works completely offline',
-  'Track inventory in real-time',
-  'Manage sales and debt',
-  'Generate detailed reports',
-]
+type Step = 'choice' | 'login' | 'join'
 
 export default function WelcomeScreen() {
   const theme = useTheme()
-
-  const handleGetStarted = async () => {
-    await AsyncStorage.setItem(FIRST_RUN_KEY, 'false')
-    router.replace('/(tabs)/pos')
-  }
+  const [step, setStep] = useState<Step>('choice')
+  const [isLoading, setIsLoading] = useState(false)
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={styles.content}>
-        {/* Logo mark */}
-        <View style={[styles.logoMark, { backgroundColor: theme.brand }]}>
-          <Store size={44} color="#fff" />
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.brand as string} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+            Connecting to Soostori Cloud...
+          </Text>
         </View>
+      ) : (
+        <View style={styles.content}>
+          <View style={[styles.logoMark, { backgroundColor: theme.brand }]}>
+            <Store size={44} color="#fff" />
+          </View>
 
-        <Text style={[styles.title, { color: theme.text }]}>Welcome to Soostori POS</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Your offline-first point of sale system</Text>
+          {step === 'choice' && (
+            <>
+              <Text style={[styles.title, { color: theme.text }]}>Welcome to Soostori POS</Text>
+              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+                Sign in with your Soostori account to continue
+              </Text>
 
-        {/* Feature list */}
-        <View style={styles.features}>
-          {FEATURES.map((feature) => (
-            <View key={feature} style={styles.featureItem}>
-              <View style={[styles.checkBadge, { backgroundColor: theme.brand + '20' }]}>
-                <Check size={14} color={theme.brand as string} strokeWidth={3} />
-              </View>
-              <Text style={[styles.featureText, { color: theme.text }]}>{feature}</Text>
-            </View>
-          ))}
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: theme.brand }]}
+                onPress={() => setStep('login')}
+                activeOpacity={0.85}
+              >
+                <LogIn size={18} color="#fff" />
+                <Text style={styles.buttonText}>Login with Soostori Account</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary, { borderColor: theme.border }]}
+                onPress={() => setStep('join')}
+                activeOpacity={0.85}
+              >
+                <Users size={18} color={theme.brand as string} />
+                <Text style={[styles.buttonTextSecondary, { color: theme.brand }]}>
+                  Join Existing Shop
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {step === 'login' && (
+            <LoginForm
+              onBack={() => setStep('choice')}
+              onSuccess={() => router.replace('/(tabs)/pos')}
+              onLoadingChange={setIsLoading}
+            />
+          )}
+
+          {step === 'join' && (
+            <JoinShopForm
+              onBack={() => setStep('choice')}
+              onLoadingChange={setIsLoading}
+            />
+          )}
         </View>
-
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.brand }]}
-          onPress={handleGetStarted}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { alignItems: 'center' },
   content: { alignItems: 'center', width: '100%', paddingHorizontal: 40 },
   logoMark: {
     width: 88,
@@ -76,16 +96,21 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, textAlign: 'center', marginBottom: 36 },
-  features: { width: '100%', marginBottom: 44, gap: 16 },
-  featureItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  checkBadge: {
-    width: 24,
-    height: 24,
+  loadingText: { marginTop: 12, fontSize: 14 },
+  button: {
+    width: '100%',
+    paddingVertical: 16,
     borderRadius: 12,
-    justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
-  featureText: { fontSize: 15, fontWeight: '500', flex: 1 },
-  button: { width: '100%', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  buttonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+  },
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  buttonTextSecondary: { color: '#F97316', fontSize: 17, fontWeight: '600' },
 })

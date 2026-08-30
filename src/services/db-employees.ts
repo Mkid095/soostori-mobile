@@ -2,6 +2,7 @@
 import { getDb } from '../lib/db'
 import type { Employee, EmployeeRole } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
+import { logAudit } from './db-audit'
 
 const PBKDF2_ITERATIONS = 100_000
 
@@ -97,6 +98,7 @@ export async function createEmployee(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     [id, shopId, name, email ?? null, phone ?? null, hash, salt, role, now, now]
   )
+  await logAudit(shopId, 'EMPLOYEE_CREATED', 'employee', id, id, undefined, undefined, JSON.stringify({ name, role }))
   return { id, shopId, name, email, phone, pinHash: hash, pinSalt: salt, role, isActive: true, createdAt: now, updatedAt: now }
 }
 
@@ -108,6 +110,7 @@ export async function updateEmployeePin(id: string, pin: string): Promise<void> 
     'UPDATE employees SET pin_hash = ?, pin_salt = ?, updated_at = ? WHERE id = ?',
     [hash, salt, now, id]
   )
+  await logAudit('default', 'PIN_CHANGED', 'employee', id, id)
 }
 
 export async function listEmployees(shopId: string): Promise<Employee[]> {

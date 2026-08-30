@@ -6,6 +6,7 @@ import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapProductRow } from './db-products-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
+import { logAudit } from './db-audit'
 
 export async function getAllProducts(): Promise<Product[]> {
   const db = await getDb()
@@ -82,6 +83,9 @@ const FIELD_MAP: { js: keyof Product; col: string; coerce?: (v: unknown) => numb
 ]
 
 export async function updateProduct(id: string, data: Partial<Product>): Promise<Product> {
+  const oldProduct = await getProductById(id)
+  const priceChanged = data.sellingPrice !== undefined || data.costPrice !== undefined
+
   const db = await getDb()
   const now = new Date().toISOString()
   const sets: string[] = ['updated_at = ?']
@@ -100,6 +104,16 @@ export async function updateProduct(id: string, data: Partial<Product>): Promise
 
   values.push(id)
   await db.runAsync(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`, values)
+
+  if (priceChanged) {
+    await logAudit(
+      'default', 'PRODUCT_PRICE_CHANGED', 'product', id,
+      undefined, undefined,
+      JSON.stringify({ sellingPrice: oldProduct?.sellingPrice, costPrice: oldProduct?.costPrice }),
+      JSON.stringify({ sellingPrice: data.sellingPrice, costPrice: data.costPrice }),
+    )
+  }
+
   await queueSync('products', 'update', id)
   return (await getProductById(id))!
 }
@@ -138,16 +152,28 @@ export async function adjustStock(
   reason: string,
   shopId?: string,
 ): Promise<void> {
-  // Use inventory transaction for proper event sourcing + current_stock cache
+  const prod = await getProductById(productId)
+  const delta = quantity > 0 ? `+${quantity}` : `${quantity}`
+  await logAudit(
+    shopId ?? 'default',
+    'STOCK_ADJUSTED',
+    'product',
+    productId,
+    undefined,
+    undefined,
+    JSON.stringify({ stock: prod?.stockQuantity }),
+    JSON.stringify({ stock: prod?.stockQuantity, delta }),
+    reason,
+  )
   await recordInventoryTransaction(
-    shopId ?? '',
+    shopId ?? 'default',
     productId,
     quantity > 0 ? 'PURCHASE' : 'ADJUSTMENT',
     Math.abs(quantity),
-    undefined, // createdBy
-    undefined, // deviceId
-    undefined, // variantName
-    undefined, // referenceId
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     reason,
   )
 }

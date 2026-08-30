@@ -8,9 +8,11 @@ import type {
   SaleConfirmedPayload,
   SaleRejectedPayload,
   StockUpdatedPayload,
+  SaleReconciliationRequiredPayload,
 } from '../lib/sync-protocol'
 import { getDb } from '../lib/db'
-import { generateId } from '../lib/formatters'
+import { generateSecureId } from '../lib/formatters'
+import { recordInventoryTransaction } from './db-inventory-transactions'
 
 const WS_PORT = 18792
 const SERVER_IP_KEY = '@soostori:serverIp'
@@ -28,6 +30,8 @@ interface LanClientConfig {
   onStockUpdated?: (payload: StockUpdatedPayload) => void
   onDevicePaired?: (deviceId: string) => void
   onConnectionChange?: (state: ConnectionState) => void
+  onHeartbeat?: (timestamp: string) => void
+  onReconciliationRequired?: (payload: SaleReconciliationRequiredPayload) => void
 }
 
 class LanClient {
@@ -35,6 +39,7 @@ class LanClient {
   private serverIp: string | null = null
   private deviceId: string | null = null
   private lastSequenceNumber = 0
+  private lastHeartbeat: string | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 10
@@ -44,7 +49,7 @@ class LanClient {
   async init(): Promise<void> {
     this.deviceId = await AsyncStorage.getItem(DEVICE_ID_KEY)
     if (!this.deviceId) {
-      this.deviceId = generateId()
+      this.deviceId = generateSecureId()
       await AsyncStorage.setItem(DEVICE_ID_KEY, this.deviceId)
     }
     const lastSeq = await AsyncStorage.getItem(LAST_SEQ_KEY)
@@ -71,6 +76,10 @@ class LanClient {
 
   getDeviceId(): string | null {
     return this.deviceId
+  }
+
+  getLastHeartbeat(): string | null {
+    return this.lastHeartbeat
   }
 
   async connect(): Promise<void> {
@@ -157,6 +166,10 @@ class LanClient {
     const payload = JSON.parse(event.payload)
 
     switch (event.eventType) {
+      case 'HOST_HEARTBEAT':
+        this.lastHeartbeat = (payload as { timestamp: string }).timestamp
+        this.config.onHeartbeat?.(this.lastHeartbeat)
+        break
       case 'SALE_CONFIRMED':
         await this.applySaleConfirmed(payload as SaleConfirmedPayload)
         this.config.onSaleConfirmed?.(payload as SaleConfirmedPayload)
@@ -172,6 +185,10 @@ class LanClient {
       case 'DEVICE_PAIRED':
         this.config.onDevicePaired?.(event.deviceId)
         break
+      case 'SALE_RECONCILIATION_REQUIRED':
+        await this.applySaleReconciliationRequired(payload as SaleReconciliationRequiredPayload)
+        this.config.onReconciliationRequired?.(payload as SaleReconciliationRequiredPayload)
+        break
     }
 
     for (const handler of this.eventHandlers) {
@@ -181,21 +198,35 @@ class LanClient {
 
   private async applySaleConfirmed(payload: SaleConfirmedPayload): Promise<void> {
     const db = await getDb()
+
+    // Idempotency: skip if already confirmed
+    const existing = await db.getFirstAsync<Record<string, unknown>>(
+      `SELECT status FROM sales WHERE id = ?`, [payload.saleId]
+    )
+    if (!existing || existing.status === 'confirmed') return
+
     await db.runAsync(
       `UPDATE sales SET status = 'confirmed', updated_at = ? WHERE id = ?`,
       [payload.timestamp, payload.saleId]
     )
-    // Deduct stock for each item
+
+    // Deduct stock via inventory transaction for proper event sourcing
     for (const item of payload.items) {
       if (item.variantName) {
+        // Variants: update variant stock directly
         await db.runAsync(
           `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
           [item.quantity, item.productId, item.variantName]
         )
+        // Also record transaction on the product for the variant
+        await recordInventoryTransaction(
+          'default', item.productId, 'SALE', item.quantity,
+          undefined, undefined, item.variantName, payload.saleId
+        )
       } else {
-        await db.runAsync(
-          `UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ? AND is_active = 1`,
-          [item.quantity, item.productId]
+        await recordInventoryTransaction(
+          'default', item.productId, 'SALE', item.quantity,
+          undefined, undefined, undefined, payload.saleId
         )
       }
     }
@@ -203,6 +234,13 @@ class LanClient {
 
   private async applySaleRejected(payload: SaleRejectedPayload): Promise<void> {
     const db = await getDb()
+
+    // Idempotency: skip if already rejected
+    const existing = await db.getFirstAsync<Record<string, unknown>>(
+      `SELECT status FROM sales WHERE id = ?`, [payload.saleId]
+    )
+    if (!existing || existing.status === 'rejected') return
+
     await db.runAsync(
       `UPDATE sales SET status = 'rejected', updated_at = ? WHERE id = ?`,
       [payload.timestamp, payload.saleId]
@@ -222,6 +260,18 @@ class LanClient {
         [payload.newBalance, payload.productId]
       )
     }
+  }
+
+  private async applySaleReconciliationRequired(payload: SaleReconciliationRequiredPayload): Promise<void> {
+    const db = await getDb()
+    const { createConflict } = await import('./db-conflicts')
+    await createConflict(
+      'default',
+      payload.saleId,
+      payload.deviceId,
+      'STOCK_CONFLICT',
+      JSON.stringify(payload)
+    )
   }
 
   addEventHandler(handler: EventHandler): () => void {

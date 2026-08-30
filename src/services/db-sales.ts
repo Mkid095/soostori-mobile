@@ -7,6 +7,7 @@ import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapSaleRow } from './db-sales-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
+import { logAudit } from './db-audit'
 
 export class InsufficientStockError extends Error {
   constructor(public productName: string, public requested: number, public available: number) {
@@ -65,6 +66,7 @@ export async function createSale(
   }
 
   await queueSync('sales', 'create', id)
+  await logAudit('default', 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod }))
   return (await getSaleById(id))!
 }
 

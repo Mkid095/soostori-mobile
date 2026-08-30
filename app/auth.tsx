@@ -12,19 +12,12 @@ import { useTheme } from '../src/hooks/useTheme'
 import { PinKeypad } from '../src/components/auth/pin-keypad'
 import { JoinShopSheet } from '../src/components/shared/join-shop-sheet'
 import { lanClient } from '../src/services/lan-client'
+import { verifyPin } from '../src/services/db-employees'
 import type { Employee } from '../src/lib/sync-protocol'
 
 const PIN_LENGTH = 4
 const EMPLOYEE_ID_KEY = '@soostori:employeeId'
 const EMPLOYEE_ROLE_KEY = '@soostori:employeeRole'
-
-// Simple PBKDF2-like hash (client-side only — not cryptographic, just matches desktop schema)
-async function hashPin(pin: string, salt: string): Promise<string> {
-  const data = new TextEncoder().encode(pin + salt)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
-}
 
 export default function AuthScreen() {
   const theme = useTheme()
@@ -96,8 +89,8 @@ export default function AuthScreen() {
     if (newPin.length === PIN_LENGTH) {
       setIsValidating(true)
       try {
-        const hash = await hashPin(newPin, selectedEmployee.pinSalt)
-        if (hash === selectedEmployee.pinHash || newPin === '0000') {
+        const valid = await verifyPin(newPin, selectedEmployee.pinHash, selectedEmployee.pinSalt)
+        if (valid) {
           // Session: store employee ID + role
           await AsyncStorage.setItem(EMPLOYEE_ID_KEY, selectedEmployee.id)
           await AsyncStorage.setItem(EMPLOYEE_ROLE_KEY, selectedEmployee.role)

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Package, Camera, X, ShoppingCart } from 'lucide-react-native'
+import { Package, Camera, X, ShoppingCart, Wifi, WifiOff } from 'lucide-react-native'
 import type { Product, CartItem, Category, ShopSettings, ProductVariant } from '../../src/lib/types'
 import { getAllProducts, searchProducts, getProductByBarcode } from '../../src/services/db-products'
 import { getAllCategories } from '../../src/services/db-categories'
@@ -19,9 +19,12 @@ import { PriceSelectionDialog } from '../../src/components/pos/price-selection-d
 import { VariantPickerModal } from '../../src/components/pos/variant-picker-modal'
 import { AppHeader } from '../../src/components/shared/app-header'
 import { useTheme } from '../../src/hooks/useTheme'
+import { useLanSync } from '../../src/hooks/useLanSync'
 
 export default function SellScreen() {
   const { bg, card, text, textSecondary: textMuted, border, brand: orange } = useTheme()
+
+  const { isConnected, isHostAvailable, connectionState } = useLanSync({ shopId: 'default', deviceId: '' })
 
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -97,6 +100,29 @@ export default function SellScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
       <AppHeader title="Sell" />
+      {connectionState !== 'disconnected' && (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          paddingVertical: 6, paddingHorizontal: 12, gap: 6,
+          backgroundColor: isHostAvailable ? '#dcfce7' : '#fef9c3',
+        }}>
+          {isHostAvailable
+            ? <Wifi size={14} color="#16a34a" />
+            : <WifiOff size={14} color="#ca8a04" />
+          }
+          <Text style={{
+            fontSize: 12,
+            color: isHostAvailable ? '#16a34a' : '#ca8a04',
+          }}>
+            {isHostAvailable
+              ? `LAN connected`
+              : connectionState === 'reconnecting'
+                ? 'Reconnecting to host...'
+                : 'Host unavailable — offline mode'
+            }
+          </Text>
+        </View>
+      )}
       <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: border, backgroundColor: card, gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: bg, borderRadius: 10, paddingHorizontal: 14 }}>

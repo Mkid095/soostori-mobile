@@ -1,4 +1,4 @@
-﻿// app/_layout.tsx — Root layout with auth gate
+// app/_layout.tsx — Root layout with auth gate
 import { useEffect, useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -9,7 +9,9 @@ import { getDb } from '../src/lib/db'
 import { getQueryClient } from '../src/lib/query-client'
 import { ThemeProvider } from '../src/hooks/useTheme'
 import { MenuProvider } from '../src/hooks/MenuContext'
-const FIRST_RUN_KEY = '@soostori:firstRun'
+import { isWithinGraceWindow, getCachedEntitlement } from '../src/services/entitlement-cache'
+
+const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -22,10 +24,18 @@ export default function RootLayout() {
     getDb()
       .then(async () => {
         setDbReady(true)
-        const firstRun = await AsyncStorage.getItem(FIRST_RUN_KEY)
-        if (firstRun === null || firstRun === 'true') {
+        const cloudToken = await AsyncStorage.getItem(CLOUD_TOKEN_KEY)
+        if (!cloudToken) {
           setAuthState('welcome')
+          return
+        }
+        // Cloud token exists — check grace window
+        const withinGrace = await isWithinGraceWindow()
+        if (withinGrace) {
+          setAuthState('app')
         } else {
+          // Token exists but grace window expired — need to re-verify online
+          // For now, go to auth as fallback (cloud API not defined yet)
           setAuthState('auth')
         }
       })
