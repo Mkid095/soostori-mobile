@@ -9,6 +9,8 @@ import {
   Receipt,
   UserCircle,
   FileText,
+  Bell,
+  HelpCircle,
 } from 'lucide-react-native'
 
 export interface NavItem {
@@ -26,5 +28,7 @@ export const MENU_ITEMS: NavItem[] = [
   { label: 'Debt Management',   href: '/(tabs)/debt',          icon: <Users size={22} /> },
   { label: 'Clients',         href: '/(tabs)/clients',        icon: <UserCircle size={22} /> },
   { label: 'Expenses',        href: '/(tabs)/expenses',       icon: <Receipt size={22} /> },
-  { label: 'Settings',        href: '/(tabs)/settings',       icon: <Settings size={22} /> },
+  { label: 'Notifications',   href: '/(tabs)/notifications',  icon: <Bell size={22} /> },
+  { label: 'Support',         href: '/(tabs)/support',        icon: <HelpCircle size={22} /> },
+  { label: 'Settings',        href: '/(tabs)/settings',        icon: <Settings size={22} /> },
 ]
