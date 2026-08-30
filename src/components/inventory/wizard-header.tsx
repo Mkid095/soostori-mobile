@@ -2,7 +2,7 @@
 import { View, Text, TouchableOpacity } from 'react-native'
 import { X, ChevronLeft } from 'lucide-react-native'
 
-const STEP_LABELS = ['Type', 'Details', 'Pricing', 'Distributor', 'Barcode']
+const STEP_LABELS = ['Type', 'Details', 'Pricing', 'Distributor', 'Barcode', 'Variations']
 
 interface Props {
   step: number
@@ -54,7 +54,7 @@ export function WizardHeader({ step, isEdit, onBack, onClose, c }: Props) {
       {/* Step label */}
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
         <Text style={{ color: muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>
-          Step {step + 1} of 5 — {STEP_LABELS[step]}
+          Step {step + 1} of 6 — {STEP_LABELS[step]}
         </Text>
       </View>
     </>

@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Package, Camera, X, ShoppingCart } from 'lucide-react-native'
-import type { Product, CartItem, Category, ShopSettings, HeldSale } from '../../src/lib/types'
+import type { Product, CartItem, Category, ShopSettings, HeldSale, ProductVariant } from '../../src/lib/types'
 import { getAllProducts, searchProducts, getProductByBarcode } from '../../src/services/db-products'
 import { getAllCategories } from '../../src/services/db-categories'
 import { holdSale } from '../../src/services/db-sales'
 import { getShopSettings } from '../../src/services/db-settings'
+import { getVariantsByProductId } from '../../src/services/db-product-variants'
 import { formatCurrency } from '../../src/lib/formatters'
 import { PosCheckoutModal } from '../../src/components/pos/pos-checkout-modal'
 import { CategoryChips } from '../../src/components/pos/category-chips'
@@ -14,6 +15,7 @@ import { BarcodeScannerModal } from '../../src/components/shared/barcode-scanner
 import { CartBar } from '../../src/components/pos/pos-cart-bar'
 import { HeldSalesSheet } from '../../src/components/pos/held-sales-sheet'
 import { PriceSelectionDialog } from '../../src/components/pos/price-selection-dialog'
+import { VariantPickerModal } from '../../src/components/pos/variant-picker-modal'
 import { AppHeader } from '../../src/components/shared/app-header'
 import { useTheme } from '../../src/hooks/useTheme'
 
@@ -30,6 +32,9 @@ export default function POSScreen() {
   const [showHeld, setShowHeld] = useState(false)
   const [priceProduct, setPriceProduct] = useState<Product | null>(null)
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null)
+  const [variantProduct, setVariantProduct] = useState<Product | null>(null)
+  const [variantPickerVisible, setVariantPickerVisible] = useState(false)
+  const [productVariants, setProductVariants] = useState<ProductVariant[]>([])
 
   const loadProducts = useCallback(async () => {
     setProducts(searchQuery ? await searchProducts(searchQuery) : await getAllProducts())
@@ -49,28 +54,45 @@ export default function POSScreen() {
 
   const cartTotal = cart.reduce((s, i) => s + i.totalPrice, 0)
 
-  function addToCartWithPrice(unitPrice: number, quantity: number, product: Product) {
+  function addToCartWithPrice(unitPrice: number, quantity: number, product: Product, variationName?: string) {
     setCart((prev) => {
-      const existing = prev.find((c) => c.productId === product.id)
+      const matchKey = variationName ? `${product.id}|${variationName}` : product.id
+      const existing = prev.find((c) => (variationName ? `${c.productId}|${c.variationName}` : c.productId) === matchKey)
       if (existing) {
         const newQty = existing.quantity + quantity
         const newTotal = newQty * unitPrice
-        return prev.map((c) => c.productId === product.id
+        return prev.map((c) => (variationName ? `${c.productId}|${c.variationName}` : c.productId) === matchKey
           ? { ...c, quantity: newQty, unitPrice, totalPrice: newTotal } : c)
       }
       return [...prev, {
         productId: product.id, productName: product.name, quantity,
         unitPrice, totalPrice: unitPrice * quantity, discount: 0,
+        variationName,
       }]
     })
   }
 
-  function addToCart(product: Product) {
+  async function addToCart(product: Product) {
     if (product.groupPrices && product.groupPrices.length > 0) {
       setPriceProduct(product)
       return
     }
+    const variants = await getVariantsByProductId(product.id)
+    if (variants.length > 0) {
+      setVariantProduct(product)
+      setProductVariants(variants)
+      setVariantPickerVisible(true)
+      return
+    }
     addToCartWithPrice(product.sellingPrice, 1, product)
+  }
+
+  function handleVariantSelect(variant: ProductVariant) {
+    if (!variantProduct) return
+    addToCartWithPrice(variant.sellingPrice ?? variantProduct.sellingPrice, 1, variantProduct, variant.name)
+    setVariantPickerVisible(false)
+    setVariantProduct(null)
+    setProductVariants([])
   }
 
   function handleRecall(sale: HeldSale) {
@@ -98,7 +120,6 @@ export default function POSScreen() {
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
-
               <TouchableOpacity onPress={() => setSearchQuery('')}><X size={16} color={textMuted} /></TouchableOpacity>
             )}
           </View>
@@ -106,7 +127,6 @@ export default function POSScreen() {
             style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: orange, justifyContent: 'center', alignItems: 'center' }}
             onPress={() => setShowScanner(true)}
           >
-
             <Camera size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -148,7 +168,6 @@ export default function POSScreen() {
         )}
         ListEmptyComponent={
           <View style={{ padding: 40, alignItems: 'center' }}>
-
             <Package size={48} color={textMuted} />
             <Text style={{ color: textMuted, fontSize: 15, marginTop: 8 }}>No products found</Text>
             <Text style={{ color: textMuted, fontSize: 12, marginTop: 4 }}>Add products in Inventory</Text>
@@ -173,7 +192,6 @@ export default function POSScreen() {
         />
       )}
 
-      {/* Floating cart button */}
       {cart.length > 0 && (
         <TouchableOpacity
           style={{
@@ -192,7 +210,6 @@ export default function POSScreen() {
               {cart.reduce((s, i) => s + i.quantity, 0)}
             </Text>
           </View>
-
           <ShoppingCart size={22} color="#fff" />
           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', marginTop: 1 }}>
             {formatCurrency(cartTotal)}
@@ -234,6 +251,16 @@ export default function POSScreen() {
           product={priceProduct}
           onSelect={(unitPrice, quantity) => { addToCartWithPrice(unitPrice, quantity, priceProduct); setPriceProduct(null) }}
           onCancel={() => setPriceProduct(null)}
+        />
+      )}
+
+      {variantProduct && (
+        <VariantPickerModal
+          visible={variantPickerVisible}
+          productName={variantProduct.name}
+          variants={productVariants}
+          onSelect={handleVariantSelect}
+          onClose={() => { setVariantPickerVisible(false); setVariantProduct(null) }}
         />
       )}
     </SafeAreaView>

@@ -1,4 +1,4 @@
-﻿// Soostori Mobile — Core Types
+// Soostori Mobile — Core Types
 // Mirrors soostori-desktop/src/lib/types.ts for offline-first SQLite
 
 export interface Product {
@@ -211,4 +211,32 @@ export interface Expense {
   date: string
   createdAt: string
   updatedAt: string
+}
+
+// ─── Product Variants ─────────────────────────────────────────────────────────
+
+export interface ProductVariant {
+  id: string
+  productId: string
+  name: string
+  sku?: string
+  barcode?: string
+  costPrice?: number
+  sellingPrice?: number
+  stockQuantity: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Notifications ─────────────────────────────────────────────────────────────
+
+export interface AppNotification {
+  id: string
+  type: 'low_stock' | 'debt_due' | 'sync_complete' | 'system' | 'info'
+  title: string
+  body?: string
+  data?: Record<string, unknown>
+  isRead: boolean
+  createdAt: string
 }

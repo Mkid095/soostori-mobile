@@ -1,12 +1,7 @@
 // Add product form — thin wrapper around the shared InventoryWizard
 import { InventoryWizard } from './inventory-wizard'
-import type { ProductType } from './inventory-types'
-
-interface GroupPrice {
-  name: string
-  price: string
-  minQuantity: string
-}
+import type { VariantRow } from './step-variations'
+import type { ProductForm } from './wizard-types'
 
 interface Props {
   visible: boolean
@@ -15,9 +10,11 @@ interface Props {
 }
 
 export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
-  async function handleSave(form: Record<string, any>) {
+  async function handleSave(form: ProductForm, variants: VariantRow[]) {
     const { createProduct } = await import('../../services/db-products')
-    const groupPricesParsed = (form.groupPrices as GroupPrice[])
+    const { createVariant } = await import('../../services/db-product-variants')
+
+    const groupPricesParsed = form.groupPrices
       .filter((gp) => gp.price && gp.minQuantity)
       .map((gp) => ({
         name: gp.name || `${gp.minQuantity}+`,
@@ -25,7 +22,7 @@ export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
         minQuantity: parseInt(gp.minQuantity),
       }))
 
-    await createProduct({
+    const product = await createProduct({
       name: form.name.trim(),
       sku: form.sku?.trim() || undefined,
       barcode: form.barcode?.trim() || undefined,
@@ -46,6 +43,21 @@ export function InventoryAddForm({ visible, onClose, onSaved }: Props) {
       distributorPhone: form.distributorPhone?.trim() || undefined,
       isActive: true,
     })
+
+    // Save variants that have at least a name
+    const validVariants = variants.filter((v) => v.name.trim())
+    for (const v of validVariants) {
+      await createVariant({
+        productId: product.id,
+        name: v.name.trim(),
+        sku: v.sku?.trim() || undefined,
+        barcode: v.barcode?.trim() || undefined,
+        costPrice: v.costPrice ? parseFloat(v.costPrice) : undefined,
+        sellingPrice: v.sellingPrice ? parseFloat(v.sellingPrice) : parseFloat(form.sellingPrice) || 0,
+        stockQuantity: parseInt(v.stockQuantity) || 0,
+        isActive: true,
+      })
+    }
   }
 
   return (
