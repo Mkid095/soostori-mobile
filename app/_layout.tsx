@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { View, Text, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, ActivityIndicator } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { getDb } from '../src/lib/db'
@@ -12,8 +12,8 @@ import { MenuProvider } from '../src/hooks/MenuContext'
 import { isWithinGraceWindow } from '../src/services/entitlement-cache'
 import { isNewDevice, importCloudSnapshot } from '../src/services/db-device-recovery'
 import { cloudDownloadSnapshot } from '../src/services/cloud-snapshot'
+import { getSession } from '../src/services/cloud-auth'
 
-const FIRST_RUN_KEY = '@soostori:firstRun'
 const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
@@ -27,13 +27,14 @@ export default function RootLayout() {
     getDb()
       .then(async () => {
         setDbReady(true)
-        const cloudToken = await AsyncStorage.getItem(CLOUD_TOKEN_KEY)
-        if (!cloudToken) {
+        // Check cloud session
+        const session = await getSession()
+        if (!session.userId) {
           setAuthState('welcome')
           return
         }
         const withinGrace = await isWithinGraceWindow()
-        if (withinGrace) {
+        if (withinGrace && session.employeeId) {
           setAuthState('app')
         } else {
           setAuthState('auth')
@@ -51,12 +52,13 @@ export default function RootLayout() {
         if (!newDevice) return
         let snapshot: Record<string, unknown> | null = null
         try {
-          snapshot = await cloudDownloadSnapshot('default')
+          const shopId = await AsyncStorage.getItem('@soostori:shopId')
+          snapshot = shopId ? await cloudDownloadSnapshot(shopId) : null
         } catch {
-          // Cloud API not yet defined — skip recovery
           return
         }
         if (!snapshot) return
+        const { Alert } = await import('react-native')
         Alert.alert(
           'Restore from Cloud',
           'This device is not registered. Would you like to restore your shop data from the cloud?',
@@ -75,7 +77,7 @@ export default function RootLayout() {
           ]
         )
       } catch {
-        // Recovery check failed silently — proceed normally
+        // Recovery check failed silently
       }
     }
     checkRecovery()

@@ -3,18 +3,21 @@
 
 import { getDb } from '../lib/db'
 import { generateId } from '../lib/formatters'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export async function queueSync(
   tableName: string,
   action: 'create' | 'update' | 'delete',
-  recordId: string
+  recordId: string,
+  shopId?: string,
 ): Promise<void> {
   const db = await getDb()
   const id = generateId()
   const now = Date.now()
+  const actualShopId = shopId || (await AsyncStorage.getItem('@soostori:shopId')) || 'unknown'
   await db.runAsync(
     'INSERT INTO sync_queue (id, table_name, action, payload, status, created_at, retry_count) VALUES (?, ?, ?, ?, ?, ?, 0)',
-    [id, tableName, action, JSON.stringify({ id: recordId }), 'pending', now]
+    [id, tableName, action, JSON.stringify({ id: recordId, shopId: actualShopId }), 'pending', now]
   )
 }
 

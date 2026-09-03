@@ -213,22 +213,17 @@ class LanClient {
     // Deduct stock via inventory transaction for proper event sourcing
     for (const item of payload.items) {
       if (item.variantName) {
-        // Variants: update variant stock directly
+        // Variants: update variant stock directly AND record transaction
         await db.runAsync(
           `UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE product_id = ? AND name = ? AND is_active = 1`,
           [item.quantity, item.productId, item.variantName]
         )
-        // Also record transaction on the product for the variant
-        await recordInventoryTransaction(
-          'default', item.productId, 'SALE', item.quantity,
-          undefined, undefined, item.variantName, payload.saleId
-        )
-      } else {
-        await recordInventoryTransaction(
-          'default', item.productId, 'SALE', item.quantity,
-          undefined, undefined, undefined, payload.saleId
-        )
       }
+      // Record inventory transaction (canonical source of truth)
+      await recordInventoryTransaction(
+        'default', item.productId, 'SALE', item.quantity,
+        undefined, undefined, item.variantName || undefined, payload.saleId
+      )
     }
   }
 

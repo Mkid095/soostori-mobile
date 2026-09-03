@@ -69,6 +69,7 @@ export default function WelcomeScreen() {
           {step === 'join' && (
             <JoinShopForm
               onBack={() => setStep('choice')}
+              onSuccess={() => router.replace('/(tabs)/pos')}
               onLoadingChange={setIsLoading}
             />
           )}

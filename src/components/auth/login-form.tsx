@@ -1,18 +1,14 @@
 // Login form component — magic code authentication
 import React, { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../hooks/useTheme'
-import { cloudSendMagicCode } from '../../services/cloud-auth'
-import { cacheEntitlement } from '../../services/entitlement-cache'
+import { cloudSendMagicCode, cloudVerifyMagicCode } from '../../services/cloud-auth'
 
 interface Props {
   onBack: () => void
   onSuccess: () => void
   onLoadingChange: (loading: boolean) => void
 }
-
-const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 
 export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
   const theme = useTheme()
@@ -40,17 +36,18 @@ export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
   }
 
   async function handleVerifyCode() {
-    if (!magicCode.trim()) {
-      Alert.alert('Missing Code', 'Please enter the magic code.')
+    if (!magicCode.trim() || magicCode.length < 6) {
+      Alert.alert('Missing Code', 'Please enter the 6-digit magic code.')
       return
     }
     onLoadingChange(true)
     try {
-      const response = await cloudSendMagicCode(email.trim()) // returns void, need verifyMagicCode
-      // Actually need to call verify function
+      const response = await cloudVerifyMagicCode(email.trim(), magicCode.trim())
       onSuccess()
     } catch (err) {
       Alert.alert('Verification Failed', err instanceof Error ? err.message : 'Invalid code')
+      setStep('email')
+      setMagicCode('')
     } finally {
       onLoadingChange(false)
     }
@@ -92,6 +89,7 @@ export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
             placeholderTextColor={theme.muted}
             keyboardType="number-pad"
             maxLength={6}
+            autoFocus
           />
         </View>
       )}
@@ -100,6 +98,7 @@ export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
         style={[styles.button, { backgroundColor: theme.brand }]}
         onPress={step === 'email' ? handleSendCode : handleVerifyCode}
         activeOpacity={0.85}
+        disabled={step === 'code' && magicCode.length < 6}
       >
         <Text style={styles.buttonText}>{step === 'email' ? 'Send Code' : 'Verify & Sign In'}</Text>
       </TouchableOpacity>
