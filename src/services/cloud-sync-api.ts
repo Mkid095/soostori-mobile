@@ -1,27 +1,45 @@
-// Cloud sync API — uploads/downloads events with Soostori Cloud
-// NOTE: This MUST be replaced with real HTTPS calls once sync-contract.md is defined
+// src/services/cloud-sync-api.ts — Real Instant DB sync API
+import { db, id } from '../lib/instant-client'
 
 export async function cloudUploadEvents(events: Array<{
-  id: string
   tableName: string
   action: string
   payload: unknown
   timestamp: string
 }>): Promise<void> {
-  throw new Error('Cloud API not yet defined — pending sync-contract.md from web team')
+  const chunks = events.map(e => {
+    const eventId = id()
+    return db.tx.syncEvents[eventId].create({
+      id: eventId,
+      entityId: eventId,
+      entity: e.tableName,
+      operation: e.action,
+      payload: e.payload,
+      syncedAt: e.timestamp,
+    })
+  })
+  await db.transact(chunks)
 }
 
-export async function cloudDownloadEvents(sinceSequence: number): Promise<Array<{
+export async function cloudDownloadEvents(): Promise<Array<{
   id: string
-  sequenceNumber: number
-  type: string
   entityId: string
+  entity: string
+  operation: string
   payload: unknown
-  timestamp: string
+  syncedAt: string
 }>> {
-  throw new Error('Cloud API not yet defined — pending sync-contract.md from web team')
+  const result = await db.queryOnce({
+    syncEvents: { $: { where: { syncedAt: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() } } } }
+  })
+  return result.data.syncEvents || []
 }
 
 export async function cloudPing(): Promise<{ ok: boolean; serverTime: string }> {
-  throw new Error('Cloud API not yet defined — pending sync-contract.md from web team')
+  try {
+    await db.queryOnce({ shops: {} })
+    return { ok: true, serverTime: new Date().toISOString() }
+  } catch {
+    return { ok: false, serverTime: new Date().toISOString() }
+  }
 }

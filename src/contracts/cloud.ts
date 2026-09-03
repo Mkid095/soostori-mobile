@@ -1,20 +1,21 @@
-// Cloud entity type definitions — local types only, no Instant DB manipulation
-// These describe what the Soostori Cloud API returns
-// Replace with auto-generated types once docs/sync-contract.md is defined
+// Cloud entity type definitions — matches Instant DB schema for Soostori
+// Maps to: $users, shops, employees, devices, subscriptions, syncEvents, backupSnapshots
 
 export interface CloudUser {
   id: string
   email: string
-  phone?: string
-  createdAt: string
+  imageURL?: string
+  type: 'owner' | 'manager' | 'attendant'
 }
 
 export interface CloudShop {
   id: string
   name: string
-  ownerId: string
-  createdAt: string
-  updatedAt: string
+  slug?: string
+  taxRate?: number
+  plan?: string
+  subscriptionExpiry?: string
+  status?: string
 }
 
 export interface CloudEmployee {
@@ -24,20 +25,22 @@ export interface CloudEmployee {
   email?: string
   phone?: string
   role: 'owner' | 'manager' | 'attendant'
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
+  status?: string
+  permissions?: Record<string, boolean>
+  createdBy?: string
+  invitedBy?: string
 }
 
 export interface CloudDevice {
   id: string
   shopId: string
-  employeeId?: string
+  deviceId: string
   deviceName?: string
-  deviceType: 'mobile' | 'desktop'
-  status: 'registered' | 'authorized' | 'revoked'
-  lastSeen?: string
-  createdAt: string
+  deviceType?: 'mobile' | 'desktop'
+  isLanHost?: boolean
+  status?: string
+  lastSeenAt?: string
+  authorizedAt?: string
 }
 
 export interface SubscriptionEntitlement {
@@ -60,18 +63,30 @@ export interface CloudInvitation {
   createdAt: string
 }
 
-export interface CloudSyncCursor {
+export interface SyncEvent {
+  id: string
+  entityId: string
+  entity: string
+  operation: string
+  payload?: string
+  syncedAt: string
+}
+
+export interface BackupSnapshot {
+  id: string
   shopId: string
-  deviceId: string
-  lastSequenceNumber: number
-  lastSyncedAt: string
+  version: number
+  snapshotId: string
+  expiresAt?: string
+  recordCounts?: Record<string, number>
+  sizeBytes?: number
 }
 
 export interface CloudAuthResponse {
   user: CloudUser
   shop: CloudShop
-  employee: CloudEmployee
-  device: CloudDevice
+  employee?: CloudEmployee
+  device?: CloudDevice
   entitlement: SubscriptionEntitlement
   serverTime: string
 }

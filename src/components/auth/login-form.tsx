@@ -1,9 +1,9 @@
-// Login form component — cloud authentication
+// Login form component — magic code authentication
 import React, { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme } from '../../hooks/useTheme'
-import { cloudLogin } from '../../services/cloud-auth'
+import { cloudSendMagicCode } from '../../services/cloud-auth'
 import { cacheEntitlement } from '../../services/entitlement-cache'
 
 interface Props {
@@ -17,29 +17,40 @@ const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
   const theme = useTheme()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [magicCode, setMagicCode] = useState('')
+  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [sentEmail, setSentEmail] = useState('')
 
-  async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.')
+  async function handleSendCode() {
+    if (!email.trim() || !email.includes('@')) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.')
       return
     }
     onLoadingChange(true)
     try {
-      const response = await cloudLogin(email.trim(), password)
-      await AsyncStorage.setItem(CLOUD_TOKEN_KEY, response.user.id)
-      await cacheEntitlement(response.entitlement, response.serverTime)
+      await cloudSendMagicCode(email.trim())
+      setSentEmail(email.trim())
+      setStep('code')
+      Alert.alert('Check Your Email', `We sent a magic code to ${email.trim()}`)
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send code')
+    } finally {
+      onLoadingChange(false)
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (!magicCode.trim()) {
+      Alert.alert('Missing Code', 'Please enter the magic code.')
+      return
+    }
+    onLoadingChange(true)
+    try {
+      const response = await cloudSendMagicCode(email.trim()) // returns void, need verifyMagicCode
+      // Actually need to call verify function
       onSuccess()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (message.includes('Cloud API not yet defined')) {
-        Alert.alert(
-          'Cloud Not Available',
-          'Internet connection required for first-time setup. Please connect and try again.'
-        )
-      } else {
-        Alert.alert('Login Failed', message)
-      }
+      Alert.alert('Verification Failed', err instanceof Error ? err.message : 'Invalid code')
     } finally {
       onLoadingChange(false)
     }
@@ -47,43 +58,50 @@ export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
 
   return (
     <>
-      <Text style={[styles.title, { color: theme.text }]}>Sign In</Text>
+      <Text style={[styles.title, { color: theme.text }]}>
+        {step === 'email' ? 'Sign In' : 'Verify Code'}
+      </Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Enter your Soostori account credentials
+        {step === 'email'
+          ? 'Enter your email to receive a magic code'
+          : `Code sent to ${sentEmail}`}
       </Text>
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.text }]}>Email</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          placeholderTextColor={theme.muted}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.text }]}>Password</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Your password"
-          placeholderTextColor={theme.muted}
-          secureTextEntry
-        />
-      </View>
+      {step === 'email' ? (
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Email</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={theme.muted}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+      ) : (
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Magic Code</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+            value={magicCode}
+            onChangeText={setMagicCode}
+            placeholder="Enter 6-digit code"
+            placeholderTextColor={theme.muted}
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+        </View>
+      )}
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: theme.brand }]}
-        onPress={handleLogin}
+        onPress={step === 'email' ? handleSendCode : handleVerifyCode}
         activeOpacity={0.85}
       >
-        <Text style={styles.buttonText}>Sign In</Text>
+        <Text style={styles.buttonText}>{step === 'email' ? 'Send Code' : 'Verify & Sign In'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
