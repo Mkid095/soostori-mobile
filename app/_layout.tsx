@@ -9,12 +9,12 @@ import { getDb } from '../src/lib/db'
 import { getQueryClient } from '../src/lib/query-client'
 import { ThemeProvider } from '../src/hooks/useTheme'
 import { MenuProvider } from '../src/hooks/MenuContext'
+import { useCloudSync } from '../src/hooks/useCloudSync'
+import { useDeviceHeartbeat } from '../src/hooks/useDeviceHeartbeat'
 import { isWithinGraceWindow } from '../src/services/entitlement-cache'
 import { isNewDevice, importCloudSnapshot } from '../src/services/db-device-recovery'
 import { cloudDownloadSnapshot } from '../src/services/cloud-snapshot'
 import { getSession } from '../src/services/cloud-auth'
-
-const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -22,6 +22,10 @@ export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [authState, setAuthState] = useState<AuthState>('loading')
+
+  // Cloud sync worker + device heartbeat — only active when authed into app
+  useCloudSync()
+  useDeviceHeartbeat()
 
   useEffect(() => {
     getDb()

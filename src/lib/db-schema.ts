@@ -151,6 +151,7 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS sync_queue (
       id TEXT PRIMARY KEY,
+      shop_id TEXT,
       table_name TEXT NOT NULL,
       action TEXT NOT NULL,
       payload TEXT NOT NULL,
@@ -361,6 +362,8 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
   await migrateAddColumn(db, 'sales', 'device_id', 'TEXT')
   // Products needs current_stock as canonical stock cache (inventory_transactions is the truth)
   await migrateAddColumn(db, 'products', 'current_stock', 'INTEGER DEFAULT 0')
+  // Sync queue needs shop_id column for tenant scoping on cloud upload
+  await migrateAddColumn(db, 'sync_queue', 'shop_id', 'TEXT')
 }
 
 async function migrateAddColumn(

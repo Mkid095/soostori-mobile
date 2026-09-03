@@ -2,9 +2,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDb } from '../lib/db'
 import { getSyncState, updateSyncState } from './db-sync-state'
-import { isWithinGraceWindow } from './entitlement-cache'
+import { markSyncEventRetryable } from './sync-queue-helper'
 
-const SYNC_TOKEN_KEY = '@soostori:cloudToken'
 const SYNC_INTERVAL_MS = 60_000 // 1 minute
 
 interface QueuedEvent {
@@ -67,12 +66,7 @@ async function uploadEventBatch(events: QueuedEvent[]): Promise<void> {
 }
 
 export async function processSyncQueue(): Promise<{ processed: number; failed: number }> {
-  const withinGrace = await isWithinGraceWindow()
-  if (!withinGrace) {
-    console.log('SyncQueue: outside grace window, skipping')
-    return { processed: 0, failed: 0 }
-  }
-
+  // Try sync regardless of grace window — server may grant transient access
   const events = await getQueuedEvents(50)
   if (events.length === 0) return { processed: 0, failed: 0 }
 
@@ -85,8 +79,19 @@ export async function processSyncQueue(): Promise<{ processed: number; failed: n
       await markEventSynced(event.id)
       processed++
     } catch (err) {
-      await markEventFailed(event.id)
-      failed++
+      const message = err instanceof Error ? err.message : String(err)
+      // If unauthorized, don't keep retrying for 3 minutes
+      if (message.includes('401') || message.includes('UNAUTHORIZED')) {
+        await markEventFailed(event.id)
+        failed++
+        // Clear entitlement cache to force re-auth on next attempt
+        await AsyncStorage.removeItem('@soostori:entitlement')
+        await AsyncStorage.removeItem('@soostori:verificationDeadline')
+      } else {
+        // Network or other errors → leave as pending for retry
+        // Use the retry backoff helper
+        await markSyncEventRetryable(event.id)
+      }
     }
   }
 

@@ -16,8 +16,8 @@ export async function queueSync(
   const now = Date.now()
   const actualShopId = shopId || (await AsyncStorage.getItem('@soostori:shopId')) || 'unknown'
   await db.runAsync(
-    'INSERT INTO sync_queue (id, table_name, action, payload, status, created_at, retry_count) VALUES (?, ?, ?, ?, ?, ?, 0)',
-    [id, tableName, action, JSON.stringify({ id: recordId, shopId: actualShopId }), 'pending', now]
+    'INSERT INTO sync_queue (id, shop_id, table_name, action, payload, status, created_at, retry_count) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
+    [id, actualShopId, tableName, action, JSON.stringify({ id: recordId, shopId: actualShopId }), 'pending', now]
   )
 }
 

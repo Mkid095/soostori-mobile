@@ -1,0 +1,2 @@
+- [Sync queue conventions](sync-queue-conventions.md) — schema, retries, 401 handling for cloud upload
+- [db-schema exceptions](db-schema-exceptions.md) — db-schema.ts exceeds 150-line limit as migrations file

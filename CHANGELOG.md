@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 3-4 sync worker and heartbeat
+
+- **sync-queue-processor.ts**: `processSyncQueue()` no longer bails when outside grace window — attempts upload every tick and lets the server enforce auth. On 401/UNAUTHORIZED, the event is marked failed and the cached entitlement is cleared so the next sync forces re-auth. Other errors route through `markSyncEventRetryable()` so transient network issues back off (1min → 5min → 15min) instead of failing immediately.
+- **sync-queue-helper.ts**: `queueSync()` now persists `shop_id` into the new `sync_queue.shop_id` column so cloud uploads carry tenant context.
+- **db-schema.ts**: `sync_queue` table gained a `shop_id TEXT` column, with a safe `ALTER TABLE` migration for existing installs.
+- **useCloudSync**: hook now starts the sync worker unconditionally on mount and stops it on unmount; grace-window gating moved into the processor where 401 is handled explicitly.
+- **useDeviceHeartbeat** (new): 5-minute heartbeat written to AsyncStorage (`@soostori:lastHeartbeat`) on app focus and via a 60-second tick loop, with a per-device `@soostori:heartbeat:<deviceId>` mirror.
+- **_layout.tsx**: calls `useCloudSync()` and `useDeviceHeartbeat()` so the sync worker and heartbeat run for the lifetime of the app.
+
 ### Phase 3 — Conflict Handling
 - **db-conflicts.ts enhanced**: `resolveConflict` now supports PARTIAL_FULFILL/CANCEL/ESCALATE; `applyPartialFulfillment` for partial inventory restoration
 
