@@ -1,5 +1,6 @@
 // Sale CRUD operations — business logic in services, NOT components
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDb } from '../lib/db'
 import { canSell } from './db-products'
 import type { Sale, SaleItem, CartItem, HeldSale } from '../lib/types'
@@ -8,6 +9,11 @@ import { queueSync } from './sync-queue-helper'
 import { mapSaleRow } from './db-sales-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
 import { logAudit } from './db-audit'
+
+async function resolveShopId(): Promise<string> {
+  const stored = await AsyncStorage.getItem('@soostori:shopId')
+  return stored ?? ''
+}
 
 export class InsufficientStockError extends Error {
   constructor(public productName: string, public requested: number, public available: number) {
@@ -30,6 +36,7 @@ export async function createSale(
   const now = new Date().toISOString()
   const itemsSummary = `${items.length} item${items.length !== 1 ? 's' : ''}`
   const itemsJson = JSON.stringify(items)
+  const shopId = await resolveShopId()
 
   // Validate stock BEFORE inserting the sale record
   for (const item of items) {
@@ -54,7 +61,7 @@ export async function createSale(
     )
     // Use inventory transaction for proper event sourcing
     await recordInventoryTransaction(
-      '', // shopId — empty for local-only sales
+      shopId,
       item.productId,
       'SALE',
       item.quantity,
@@ -65,8 +72,8 @@ export async function createSale(
     )
   }
 
-  await queueSync('sales', 'create', id)
-  await logAudit('default', 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod }))
+  await queueSync('sales', 'create', id, shopId || undefined)
+  await logAudit(shopId || 'default', 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod }))
   return (await getSaleById(id))!
 }
 
@@ -83,6 +90,7 @@ export async function createSaleOffline(
   const now = new Date().toISOString()
   const itemsSummary = `${items.length} item${items.length !== 1 ? 's' : ''}`
   const itemsJson = JSON.stringify(items)
+  const shopId = await resolveShopId()
 
   await db.runAsync(
     `INSERT INTO sales (id, type, status, subtotal, discount_amount, total_amount, paid_amount, payment_method, items, items_summary, created_at, updated_at)
@@ -99,7 +107,7 @@ export async function createSaleOffline(
     )
     // Use inventory transaction for proper event sourcing + current_stock cache
     await recordInventoryTransaction(
-      '', // shopId — empty for local-only sales
+      shopId,
       item.productId,
       'SALE',
       item.quantity,
@@ -110,7 +118,7 @@ export async function createSaleOffline(
     )
   }
 
-  await queueSync('sales', 'create', id)
+  await queueSync('sales', 'create', id, shopId || undefined)
   return (await getSaleById(id))!
 }
 

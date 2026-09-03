@@ -1,10 +1,17 @@
 // Product variant CRUD operations — business logic in services, NOT components
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDb } from '../lib/db'
 import type { ProductVariant } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapVariantRow } from './db-product-variants-mapper'
+import { recordInventoryTransaction } from './db-inventory-transactions'
+
+async function resolveVariantShopId(): Promise<string> {
+  const stored = await AsyncStorage.getItem('@soostori:shopId')
+  return stored ?? 'default'
+}
 
 export async function getVariantsByProductId(productId: string): Promise<ProductVariant[]> {
   const db = await getDb()
@@ -77,19 +84,29 @@ export async function adjustVariantStock(
   const variant = await getVariantById(variantId)
   if (!variant) return
 
-  const newBalance = variant.stockQuantity + quantity
-  const id = generateId()
-  const now = new Date().toISOString()
-
-  await db.runAsync(
-    'INSERT INTO stock_movements (id, product_id, product_name, type, quantity, balance_after, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, variant.productId, `Variant: ${variant.name}`, quantity > 0 ? 'purchase' : 'adjustment', quantity, newBalance, reason, now]
+  const shopId = await resolveVariantShopId()
+  // Canonical event: inventory_transactions is the source of truth.
+  // recordInventoryTransaction also updates products.current_stock cache as a side effect.
+  await recordInventoryTransaction(
+    shopId,
+    variant.productId,
+    quantity > 0 ? 'PURCHASE' : 'ADJUSTMENT',
+    Math.abs(quantity),
+    undefined,
+    undefined,
+    variant.name,
+    variantId,
+    reason,
   )
+
+  // Maintain variant-local stock counter (variants track stock per SKU).
+  const newBalance = variant.stockQuantity + quantity
+  const now = new Date().toISOString()
   await db.runAsync(
     'UPDATE product_variants SET stock_quantity = ?, updated_at = ? WHERE id = ?',
     [newBalance, now, variantId]
   )
-  await queueSync('stock_movements', 'create', id)
+  await queueSync('product_variants', 'update', variantId)
 }
 
 export async function getVariantsByProductIdWithStock(productId: string): Promise<ProductVariant[]> {

@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ### Phase 3-4 sync worker and heartbeat
 
 - **sync-queue-processor.ts**: `processSyncQueue()` no longer bails when outside grace window — attempts upload every tick and lets the server enforce auth. On 401/UNAUTHORIZED, the event is marked failed and the cached entitlement is cleared so the next sync forces re-auth. Other errors route through `markSyncEventRetryable()` so transient network issues back off (1min → 5min → 15min) instead of failing immediately.
@@ -12,6 +13,18 @@ All notable changes to this project will be documented in this file.
 - **useCloudSync**: hook now starts the sync worker unconditionally on mount and stops it on unmount; grace-window gating moved into the processor where 401 is handled explicitly.
 - **useDeviceHeartbeat** (new): 5-minute heartbeat written to AsyncStorage (`@soostori:lastHeartbeat`) on app focus and via a 60-second tick loop, with a per-device `@soostori:heartbeat:<deviceId>` mirror.
 - **_layout.tsx**: calls `useCloudSync()` and `useDeviceHeartbeat()` so the sync worker and heartbeat run for the lifetime of the app.
+=======
+### Phase 7 — Inventory Authority & Auth Wiring
+
+- **Inventory authority consolidated**: `db-schema.ts` keeps both `stock_quantity` (legacy) and `current_stock` (cache). `inventory_transactions.balance_after` is the canonical source of truth.
+- **`db-products.canSell()`** reads `products.current_stock` — verified consistent with the inventory-transaction event log.
+- **`db-inventory-transactions.recordInventoryTransaction()`** writes `inventory_transactions` AND updates `products.current_stock` cache atomically — verified, no fix needed.
+- **`db-product-variants.adjustVariantStock()`** now routes through `recordInventoryTransaction()` (canonical path) before maintaining the variant-local `product_variants.stock_quantity` counter. Removed raw `INSERT INTO stock_movements` for variants.
+- **`db-sales.createSale()` & `createSaleOffline()`** now resolve the real `shopId` from `AsyncStorage` (`@soostori:shopId`) instead of passing an empty string to `recordInventoryTransaction()`. `queueSync()` also receives the explicit shopId; `logAudit()` audit row uses the resolved shop.
+- **Dry-run auth wiring check** (`scripts/dryrun.ts` + `npm run dryrun`): prints cloud ping, schema query, and verifies the auth/sync/snapshot entry points are importable. Cannot replace on-device testing — intended as a wiring smoke test. Each step is wrapped in try/catch so partial failures surface cleanly.
+- **`app/onboarding-test.tsx`** — DEV-ONLY test screen. Uses `useEmployee()` to prove the AsyncStorage session contract reaches the local employee/shop without going through magic-code auth. NOT mounted in production tab bar; navigate manually during development only.
+- **devDependency added**: `tsx ^4.19.2` to support `npm run dryrun`. Build/runtime deps untouched.
+>>>>>>> 0563c3f (feat(mobile): inventory authority + dry-run + onboarding test)
 
 ### Phase 3 — Conflict Handling
 - **db-conflicts.ts enhanced**: `resolveConflict` now supports PARTIAL_FULFILL/CANCEL/ESCALATE; `applyPartialFulfillment` for partial inventory restoration
