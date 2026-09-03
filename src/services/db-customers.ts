@@ -1,7 +1,8 @@
-// Customer CRUD operations — business logic in services, NOT components
+// Customer CRUD operations — canonical implementation (Phase 8 merge)
+// Business logic in services, NOT components.
 
 import { getDb } from '../lib/db'
-import type { Customer } from '../lib/types'
+import type { Customer, Sale } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 
@@ -76,6 +77,33 @@ export async function deactivateCustomer(id: string): Promise<void> {
     [now, id]
   )
   await queueSync('customers', 'update', id)
+}
+
+export async function getCustomerPurchaseHistory(
+  customerIdNumber: string
+): Promise<Sale[]> {
+  const db = await getDb()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM sales
+     WHERE customer_id_number = ? AND status = 'completed'
+     ORDER BY created_at DESC LIMIT 50`,
+    [customerIdNumber]
+  )
+  return rows.map((row) => ({
+    id: String(row.id),
+    type: (row.type as Sale['type']) || 'retail',
+    status: (row.status as Sale['status']) || 'completed',
+    subtotal: Number(row.subtotal) || 0,
+    discountAmount: Number(row.discount_amount) || 0,
+    totalAmount: Number(row.total_amount) || 0,
+    paidAmount: Number(row.paid_amount) || 0,
+    paymentMethod: (row.payment_method as Sale['paymentMethod']) || 'cash',
+    note: row.note ? String(row.note) : undefined,
+    customerIdNumber: row.customer_id_number ? String(row.customer_id_number) : undefined,
+    items_summary: row.items_summary ? String(row.items_summary) : undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }))
 }
 
 function mapRow(row: Record<string, unknown>): Customer {

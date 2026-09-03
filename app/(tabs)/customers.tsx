@@ -1,30 +1,31 @@
-// app/(tabs)/customers.tsx — Search and add clients/customers
+// app/(tabs)/customers.tsx — Search and add customers
+// Uses the canonical db-customers service.
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Search, UserPlus, Phone, X } from 'lucide-react-native'
-import type { Client } from '../../src/lib/types'
-import { getClients, searchClients, createClient } from '../../src/services/db-clients'
+import type { Customer } from '../../src/lib/types'
+import { getAllCustomers, searchCustomers, createCustomer } from '../../src/services/db-customers'
 import { useTheme } from '../../src/hooks/useTheme'
 import { AppHeader } from '../../src/components/shared/app-header'
 
 export default function CustomersScreen() {
   const { bg, card, text, textSecondary: textMuted, border, brand } = useTheme()
-  const [clients, setClients] = useState<Client[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [query, setQuery] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
 
   const load = useCallback(async () => {
-    setClients(query ? await searchClients(query) : await getClients())
+    setCustomers(query ? await searchCustomers(query) : await getAllCustomers())
   }, [query])
 
   useEffect(() => { load() }, [load])
 
   async function handleAdd() {
     if (!newName.trim()) { Alert.alert('Error', 'Name is required'); return }
-    await createClient({ name: newName.trim(), phone: newPhone.trim() || undefined })
+    await createCustomer({ name: newName.trim(), phone: newPhone.trim() || undefined })
     setNewName(''); setNewPhone(''); setShowAdd(false); load()
   }
 
@@ -63,7 +64,7 @@ export default function CustomersScreen() {
       </View>
 
       <FlatList
-        data={clients}
+        data={customers}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
         renderItem={({ item }) => (

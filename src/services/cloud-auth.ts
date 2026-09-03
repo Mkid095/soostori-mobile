@@ -103,7 +103,7 @@ export async function cloudVerifyMagicCode(
   }
 }
 
-async function resolveSubscription(shopId: string): Promise<SubscriptionEntitlement> {
+export async function resolveSubscription(shopId: string): Promise<SubscriptionEntitlement> {
   try {
     const subsResult = await db.queryOnce({ subscriptions: {} })
     const subs = (subsResult.data.subscriptions as any[]) || []

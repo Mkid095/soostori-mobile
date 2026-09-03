@@ -1,11 +1,12 @@
 // app/(tabs)/settings.tsx — Settings page with section cards → full-screen modals
 import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { router } from 'expo-router'
 import { useTheme, useAppTheme } from '../../src/hooks/useTheme'
 import {
   Store, Palette, CreditCard, Scan, Printer,
-  Database, Info, Shield, Sun, Moon,
+  Database, Info, Shield, Sun, Moon, LogOut,
 } from 'lucide-react-native'
 
 import { SettingsSectionCard } from '../../src/components/settings/settings-section-card'
@@ -17,6 +18,7 @@ import { PrinterSection } from '../../src/components/settings/printer-section'
 import { ChangelogSection } from '../../src/components/settings/changelog-section'
 import { UpdateChecker, checkForUpdate } from '../../src/components/settings/update-checker'
 import { getShopSettings } from '../../src/services/db-settings'
+import { cloudLogout } from '../../src/services/cloud-auth'
 import { APP_VERSION } from '../../src/lib/constants'
 import type { ShopSettings } from '../../src/lib/types'
 
@@ -69,6 +71,28 @@ export default function SettingsScreen() {
   const [activeSection, setActiveSection] = useState<string | null>(null)
   const config = activeSection ? MODAL_CONFIGS[activeSection] : null
 
+  async function handleLogout() {
+    Alert.alert(
+      'Sign out?',
+      'You will need to sign in again to use Soostori POS.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cloudLogout()
+              router.replace('/welcome')
+            } catch {
+              Alert.alert('Sign out failed', 'Please try again.')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
       {/* Page header */}
@@ -96,6 +120,25 @@ export default function SettingsScreen() {
             onPress={() => setActiveSection(section.id)}
           />
         ))}
+
+        {/* Logout button */}
+        <TouchableOpacity
+          style={{
+            marginTop: 16,
+            borderRadius: 12,
+            borderWidth: 1.5,
+            borderColor: '#ef4444',
+            paddingVertical: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+          onPress={handleLogout}
+        >
+          <LogOut size={18} color="#ef4444" />
+          <Text style={{ color: '#ef4444', fontWeight: '800', fontSize: 15 }}>Sign Out</Text>
+        </TouchableOpacity>
 
         {/* Version footer */}
         <View style={{ alignItems: 'center', paddingVertical: 20, borderTopWidth: 1, borderTopColor: border, marginTop: 8 }}>

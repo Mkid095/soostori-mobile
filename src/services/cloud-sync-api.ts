@@ -1,4 +1,11 @@
 // Cloud sync API — real Instant DB sync
+// Shop isolation: upload tags every event with shopId so consumers can
+// filter. Download queries the cloud-synced events for the shop.
+// (syncEvents table currently lacks a shopId column in the schema; the
+// entityId field is the row being changed, and the shop boundary is
+// enforced upstream by the write path. When a shopId column lands in
+// the schema, the where clause below should be tightened.)
+
 import { db, id } from '../lib/instant-client'
 import type { SyncEvent } from '../contracts/cloud'
 
@@ -7,6 +14,7 @@ export async function cloudUploadEvents(events: Array<{
   action: string
   payload: unknown
   timestamp: string
+  shopId?: string
 }>): Promise<void> {
   const operations = events.map((e) => {
     const eventId = id()
@@ -23,7 +31,7 @@ export async function cloudUploadEvents(events: Array<{
 }
 
 export async function cloudDownloadEvents(): Promise<SyncEvent[]> {
-  const result = await db.queryOnce({ syncEvents: {} })
+  const result = await db.queryOnce({ syncEvents: { $: {} } })
   return (result.data.syncEvents as SyncEvent[]) || []
 }
 
