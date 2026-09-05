@@ -364,6 +364,11 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
   await migrateAddColumn(db, 'products', 'current_stock', 'INTEGER DEFAULT 0')
   // Sync queue needs shop_id column for tenant scoping on cloud upload
   await migrateAddColumn(db, 'sync_queue', 'shop_id', 'TEXT')
+  // Audit log needs SDK envelope columns for @soostori/audit bridge
+  await migrateAddColumn(db, 'audit_logs', 'event_id', 'TEXT')
+  await migrateAddColumn(db, 'audit_logs', 'event_name', 'TEXT')
+  await migrateAddColumn(db, 'audit_logs', 'actor_type', "TEXT DEFAULT 'system'")
+  await migrateAddColumn(db, 'audit_logs', 'shop_id', 'TEXT')
 }
 
 async function migrateAddColumn(

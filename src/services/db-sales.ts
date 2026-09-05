@@ -9,6 +9,11 @@ import { queueSync } from './sync-queue-helper'
 import { mapSaleRow } from './db-sales-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
 import { logAudit } from './db-audit'
+import { publishSdkEvent } from './sdk-bridge/sdk-event-bus'
+import { SALE_COMPLETED, SALE_PENDING, SALE_CONFIRMED } from './sdk-bridge/sdk-bridge-types'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getMobilePrimaryStatus } from './adapters/devices/mobile-primary-coordinator'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
 
 async function resolveShopId(): Promise<string> {
   const stored = await AsyncStorage.getItem('@soostori:shopId')

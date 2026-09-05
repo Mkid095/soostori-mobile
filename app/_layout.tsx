@@ -15,6 +15,7 @@ import { isWithinGraceWindow } from '../src/services/entitlement-cache'
 import { isNewDevice, importCloudSnapshot } from '../src/services/db-device-recovery'
 import { cloudDownloadSnapshot } from '../src/services/cloud-snapshot'
 import { getSession } from '../src/services/cloud-auth'
+import { attachSdkBridges } from '../src/services/sdk-bridge/bootstrap'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -26,6 +27,14 @@ export default function RootLayout() {
   // Cloud sync worker + device heartbeat — only active when authed into app
   useCloudSync()
   useDeviceHeartbeat()
+
+  // SDK event bus bridges (audit + notifications fan-out). Mounted once the
+  // database is ready so subscriptions can write to local tables immediately.
+  useEffect(() => {
+    if (!dbReady) return
+    const detach = attachSdkBridges()
+    return detach
+  }, [dbReady])
 
   useEffect(() => {
     getDb()
