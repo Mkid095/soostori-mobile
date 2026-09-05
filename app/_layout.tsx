@@ -50,7 +50,7 @@ export default function RootLayout() {
           saved.updateType === 'OTA' &&
           saved.isRuntimeCompatible === 1
         ) {
-          mobileUpdateManager.checkForUpdates()
+          mobileUpdateManager.checkForUpdate()
         }
       } catch {
         // silently ignore — update check is non-critical

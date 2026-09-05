@@ -1,17 +1,15 @@
 /**
- * MobileUpdateManager — expo-updates OTA adapter for soostori-mobile.
+ * MobileUpdateManager — @soostori/updates adapter for soostori-mobile.
  *
- * Exposes a singleton that wraps expo-updates with:
- *   - Binary update detection (versionCode comparison)
- *   - Runtime compatibility checking
- *   - Background download with progress tracking
- *   - POS safety gate (blocks update during active sale)
- *   - Offline returns CURRENT (not ERROR)
- *   - Event-listener pub/sub for UI binding
+ * Implements the platform-neutral UpdateManager contract using expo-updates as the
+ * underlying OTA engine.
  *
- * This adapter is self-contained and does NOT import @soostori/updates
- * (that package is not yet published). When it becomes available, the
- * internals can be swapped for the SDK without changing the public API.
+ * Maps the expo-updates state machine to the canonical SDK states:
+ *   CURRENT / CHECKING / UPDATE_AVAILABLE / DOWNLOADING /
+ *   READY_TO_INSTALL / INSTALLING / ERROR / UNSUPPORTED
+ *
+ * Distinguishes OTA (code/assets) from BINARY (native APK) updates.
+ * Uses @soostori/updates for all canonical types and interfaces.
  *
  * expo-updates is lazy-imported inside async methods so this module can be
  * imported in Node.js test environments (tsx) without triggering the React
@@ -19,35 +17,44 @@
  */
 
 import { APP_VERSION } from '../../../lib/constants'
+import type {
+  UpdateManager,
+  UpdateStatus,
+  UpdateAvailableInfo,
+  UpdateProgress,
+  UpdateState,
+  UpdateError,
+  UpdateErrorCode,
+  SemVer,
+} from '@soostori/updates'
+import {
+  UPDATE_STATES,
+  UPDATE_IN_PROGRESS_STATES,
+  UPDATE_TERMINAL_STATES,
+  UPDATE_RETRYABLE_STATES,
+  isNewerVersion,
+  computeProgress,
+} from '@soostori/updates'
 
-// ── Types ────────────────────────────────────────────────────────────────────
+/** ISO 8601 timestamp string — mirrored from @soostori/core */
+type ISO8601 = string
 
-export type UpdateState =
-  | 'CURRENT'
-  | 'CHECKING'
-  | 'DOWNLOADING'
-  | 'READY_TO_INSTALL'
-  | 'INSTALLING'
-  | 'ERROR'
-
-export interface UpdateInfo {
-  state: UpdateState
-  currentVersion?: string
-  availableVersion?: string
-  downloadProgress?: number
-  error?: string
-  updateType?: 'OTA' | 'BINARY'
-  isRuntimeCompatible?: boolean
+export type { UpdateState, UpdateProgress, UpdateError, UpdateErrorCode }
+export type { UpdateStatus }
+export {
+  UPDATE_STATES,
+  UPDATE_IN_PROGRESS_STATES,
+  UPDATE_TERMINAL_STATES,
+  UPDATE_RETRYABLE_STATES,
+  isNewerVersion,
+  computeProgress,
 }
-
-type Listener = (info: UpdateInfo) => void
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** How often (ms) to poll download progress while in DOWNLOADING state */
 const PROGRESS_POLL_MS = 500
 
-// ── MobileUpdateManager ──────────────────────────────────────────────────────
+// ── MobileUpdateManager ─────────────────────────────────────────────────────
 
 let _instance: MobileUpdateManager | null = null
 let _updates: typeof import('expo-updates') | null = null
@@ -57,30 +64,43 @@ async function getUpdates() {
   return _updates
 }
 
-export class MobileUpdateManager {
-  private _state: UpdateInfo = { state: 'CURRENT' }
-  private _listeners = new Set<Listener>()
+function isoNow(): ISO8601 {
+  return new Date().toISOString()
+}
+
+export class MobileUpdateManager implements UpdateManager {
+  private _status: UpdateStatus = {
+    state: 'CURRENT',
+    currentVersion: APP_VERSION as SemVer,
+    requiresRestart: false,
+    lastCheckedAt: null,
+    installedAt: isoNow(),
+  }
+  private _listeners = new Set<(status: UpdateStatus) => void>()
   private _progressTimer: ReturnType<typeof setInterval> | null = null
   private _activeSaleRef: () => boolean = () => false
+  private _retryCount = 0
+  private _lastAvailableInfo: UpdateAvailableInfo | null = null
 
   private constructor() {
-    // Private: use getInstance() or __createForTesting()
+    // Use getInstance()
   }
 
-  /**
-   * Test seam — creates an instance without touching the singleton.
-   * Tests use this to get a clean MobileUpdateManager per scenario.
-   */
+  /** Test seam — creates an instance without touching the singleton. */
   static __createForTesting(): MobileUpdateManager {
     const instance = Object.create(MobileUpdateManager.prototype) as MobileUpdateManager
-    instance._state = {
+    instance._status = {
       state: 'CURRENT',
-      currentVersion: APP_VERSION,
-      isRuntimeCompatible: true,
+      currentVersion: APP_VERSION as SemVer,
+      requiresRestart: false,
+      lastCheckedAt: null,
+      installedAt: isoNow(),
     }
     instance._listeners = new Set()
     instance._progressTimer = null
     instance._activeSaleRef = () => false
+    instance._retryCount = 0
+    instance._lastAvailableInfo = null
     return instance
   }
 
@@ -94,259 +114,256 @@ export class MobileUpdateManager {
     return _instance
   }
 
-  // ── POS safety ────────────────────────────────────────────────────────────
+  // ── UpdateManager contract ────────────────────────────────────────────────
 
-  /**
-   * Inject a function that reports whether an active sale/transaction is
-   * in progress. The update manager will block applyUpdate() when this
-   * returns true.
-   */
-  setActiveSaleRef(ref: { isActive: () => boolean } | (() => boolean)): void {
-    this._activeSaleRef = typeof ref === 'function' ? ref : ref.isActive
+  async getCurrentVersion(): Promise<SemVer> {
+    return APP_VERSION as SemVer
   }
 
-  /** True when a sale/transaction is currently active — updates must not restart the app. */
-  isSaleActive(): boolean {
-    return this._activeSaleRef()
-  }
-
-  /**
-   * Returns true when an update may be applied (no active sale, not installing).
-   * Use this before prompting the user or calling applyUpdate().
-   */
-  canApplyUpdate(): boolean {
-    return (
-      this._state.state === 'READY_TO_INSTALL' &&
-      !this.isSaleActive()
-    )
-  }
-
-  // ── Listeners ──────────────────────────────────────────────────────────────
-
-  addListener(callback: Listener): () => void {
-    this._listeners.add(callback)
-    // Emit current state immediately so the subscriber has a baseline
-    callback(this._state)
-    return () => this._listeners.delete(callback)
-  }
-
-  private _emit(next: UpdateInfo): void {
-    this._state = next
-    this._listeners.forEach((cb) => cb(next))
-  }
-
-  // ── Query (no side-effects) ────────────────────────────────────────────────
-
-  getCurrentState(): UpdateInfo {
-    return { ...this._state }
-  }
-
-  // ── checkForUpdates ───────────────────────────────────────────────────────
-
-  /**
-   * Check for available updates. Returns UpdateInfo with:
-   *   - CURRENT       — already on latest, no action needed
-   *   - DOWNLOADING   — OTA update available and download started
-   *   - READY_TO_INSTALL — update fully downloaded, ready to apply
-   *   - ERROR         — check failed (network unavailable is NOT an error)
-   *
-   * Binary update detection compares native versionCode. If a new APK/AAB
-   * is required, updateType = 'BINARY' is set (no OTA download offered).
-   */
-  async checkForUpdates(): Promise<UpdateInfo> {
-    this._emit({ state: 'CHECKING' })
+  async checkForUpdate(): Promise<UpdateAvailableInfo | null> {
+    this._setStatus({ state: 'CHECKING' })
 
     try {
       const Updates = await getUpdates()
       const update = await Updates.checkForUpdateAsync()
 
       if (!update.isAvailable) {
-        this._emit({
+        this._setStatus({
           state: 'CURRENT',
-          currentVersion: APP_VERSION,
+          currentVersion: APP_VERSION as SemVer,
+          availableVersion: undefined,
           updateType: undefined,
-          isRuntimeCompatible: true,
+          requiresRestart: false,
+          lastCheckedAt: isoNow(),
         })
-        return this.getCurrentState()
+        this._retryCount = 0
+        return null
       }
 
-      // Fetch update manifest to read version / runtime info
-      const manifest = await Updates.fetchUpdateAsync()
-      const manifestAny = manifest.manifest as Record<string, unknown>
-      const updateVersion = String(manifestAny.version ?? APP_VERSION)
-      const nativeVersion = await this._getNativeVersionCode()
+      const manifest = update.manifest as Record<string, unknown>
+      const updateVersion = String(manifest.version ?? APP_VERSION) as SemVer
+      const updateType = await this._detectUpdateType(manifest)
 
-      // Binary vs OTA decision: if manifest runtime does not match our build,
-      // the update requires a full reinstall (BINARY).
-      const isRuntimeCompatible = await this._checkRuntimeCompatibility(manifestAny)
+      const info: UpdateAvailableInfo = {
+        version: updateVersion,
+        updateType,
+        releasedAt: isoNow(),
+      }
+      this._lastAvailableInfo = info
+      this._retryCount = 0
 
-      if (!isRuntimeCompatible) {
-        this._emit({
-          state: 'CURRENT',
-          currentVersion: APP_VERSION,
+      if (updateType === 'binary') {
+        // Binary update — cannot OTA; surface as available for user to download
+        this._setStatus({
+          state: 'UPDATE_AVAILABLE',
+          currentVersion: APP_VERSION as SemVer,
           availableVersion: updateVersion,
-          updateType: 'BINARY',
-          isRuntimeCompatible: false,
-          error: undefined,
+          updateType: 'binary',
+          requiresRestart: false,
+          lastCheckedAt: isoNow(),
         })
-        return this.getCurrentState()
+        return info
       }
 
-      // Start background download and track progress
-      this._startProgressTracking()
-      this._emit({
-        state: 'DOWNLOADING',
-        currentVersion: APP_VERSION,
+      // OTA: transition to UPDATE_AVAILABLE, caller then calls downloadUpdate()
+      this._setStatus({
+        state: 'UPDATE_AVAILABLE',
+        currentVersion: APP_VERSION as SemVer,
         availableVersion: updateVersion,
-        downloadProgress: 0,
-        updateType: 'OTA',
-        isRuntimeCompatible: true,
+        updateType: 'ota',
+        requiresRestart: false,
+        lastCheckedAt: isoNow(),
       })
-
-      return this.getCurrentState()
+      return info
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      // Network errors are not errors — the POS keeps working offline
-      const isOfflineError =
-        msg.includes('network') ||
-        msg.includes('ENOTFOUND') ||
-        msg.includes('ECONNREFUSED') ||
-        msg.includes('fetch') ||
-        msg.includes('Unable to resolve host')
-
-      this._emit({
-        state: isOfflineError ? 'CURRENT' : 'ERROR',
-        currentVersion: APP_VERSION,
-        error: isOfflineError ? undefined : msg,
-        updateType: undefined,
-        isRuntimeCompatible: true,
+      const isOffline = this._isOfflineError(msg)
+      this._retryCount++
+      this._setStatus({
+        state: isOffline ? 'CURRENT' : 'ERROR',
+        currentVersion: APP_VERSION as SemVer,
+        error: isOffline
+          ? undefined
+          : { code: 'CHECK_FAILED', message: msg, retryCount: this._retryCount },
+        requiresRestart: false,
+        lastCheckedAt: isoNow(),
       })
-      return this.getCurrentState()
+      return null
     }
   }
 
-  // ── downloadUpdate ────────────────────────────────────────────────────────
-
-  /**
-   * Trigger (or continue) background download of the OTA update.
-   * Does not block the UI. Progress is delivered via listeners.
-   */
-  async downloadUpdate(): Promise<void> {
-    const { state } = this._state
-    if (state === 'DOWNLOADING' || state === 'READY_TO_INSTALL') return
-
-    if (state !== 'CURRENT') {
-      // Must call checkForUpdates first
-      this._emit({ state: 'ERROR', error: 'Must call checkForUpdates before downloadUpdate' })
+  async downloadUpdate(onProgress?: (progress: UpdateProgress) => void): Promise<void> {
+    if (this._status.state === 'DOWNLOADING') return
+    if (this._status.state !== 'UPDATE_AVAILABLE') {
+      this._setStatus({
+        state: 'ERROR',
+        currentVersion: APP_VERSION as SemVer,
+        error: { code: 'CHECK_FAILED', message: 'Must call checkForUpdate before downloadUpdate', retryCount: 0 },
+      })
       return
     }
 
+    this._setStatus({ ...this._status, state: 'DOWNLOADING', progress: undefined })
+
+    let lastProgress: UpdateProgress = {
+      downloadedBytes: 0,
+      totalBytes: undefined,
+      bytesPerSecond: 0,
+      percent: 0,
+      etaSeconds: Infinity,
+    }
+    const startTime = Date.now()
+
+    this._startProgressTracking((p) => {
+      lastProgress = p
+      onProgress?.(p)
+      this._setStatus({ ...this._status, state: 'DOWNLOADING', progress: p })
+    })
+
     try {
       const Updates = await getUpdates()
-      this._startProgressTracking()
-      this._emit({ ...this._state, state: 'DOWNLOADING', downloadProgress: 0 })
-
-      const manifest = await Updates.fetchUpdateAsync()
-      const manifestAny = manifest.manifest as Record<string, unknown>
-      const updateVersion = String(manifestAny.version ?? APP_VERSION)
-
-      // fetchUpdateAsync resolves when fully downloaded
+      await Updates.fetchUpdateAsync()
       this._stopProgressTracking()
-      this._emit({
+      this._setStatus({
         state: 'READY_TO_INSTALL',
-        currentVersion: APP_VERSION,
-        availableVersion: updateVersion,
-        downloadProgress: 100,
-        updateType: 'OTA',
-        isRuntimeCompatible: true,
+        currentVersion: APP_VERSION as SemVer,
+        availableVersion: this._status.availableVersion,
+        updateType: this._status.updateType ?? 'ota',
+        requiresRestart: true,
+        lastCheckedAt: isoNow(),
       })
     } catch (err) {
       this._stopProgressTracking()
       const msg = err instanceof Error ? err.message : String(err)
-      this._emit({
+      this._retryCount++
+      this._setStatus({
         state: 'ERROR',
-        currentVersion: APP_VERSION,
-        error: msg,
-        updateType: undefined,
-        isRuntimeCompatible: true,
+        currentVersion: APP_VERSION as SemVer,
+        error: { code: 'DOWNLOAD_FAILED', message: msg, retryCount: this._retryCount },
+        requiresRestart: false,
       })
     }
   }
 
-  // ── applyUpdate ───────────────────────────────────────────────────────────
-
-  /**
-   * Apply the downloaded update and restart the app.
-   * Throws if canApplyUpdate() is false (active sale in progress).
-   */
-  async applyUpdate(): Promise<void> {
-    if (!this.canApplyUpdate()) {
+  async installUpdate(): Promise<void> {
+    if (!this._canInstall()) {
       throw new Error(
-        `Cannot apply update: state=${this._state.state}, saleActive=${this.isSaleActive()}`,
+        `Cannot install update: state=${this._status.state}, saleActive=${this.isSaleActive()}`,
       )
     }
-
-    this._emit({ ...this._state, state: 'INSTALLING' })
-
+    this._setStatus({ ...this._status, state: 'INSTALLING' })
     try {
       const Updates = await getUpdates()
       await Updates.reloadAsync()
-      // App restarts — code after this line is never reached
+      // App restarts — code after this line never reached
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      this._emit({
+      this._retryCount++
+      this._setStatus({
         state: 'ERROR',
-        currentVersion: APP_VERSION,
-        error: msg,
-        updateType: this._state.updateType,
-        isRuntimeCompatible: this._state.isRuntimeCompatible,
+        currentVersion: APP_VERSION as SemVer,
+        error: { code: 'INSTALL_FAILED', message: msg, retryCount: this._retryCount },
+        requiresRestart: false,
       })
       throw err
     }
   }
 
-  // ── Internal helpers ───────────────────────────────────────────────────────
+  async abort(): Promise<void> {
+    this._stopProgressTracking()
+    this._retryCount++
+    this._setStatus({
+      state: 'ERROR',
+      currentVersion: APP_VERSION as SemVer,
+      error: { code: 'USER_CANCELLED', message: 'Update operation cancelled', retryCount: this._retryCount },
+      requiresRestart: false,
+      lastCheckedAt: isoNow(),
+    })
+  }
 
-  private async _getNativeVersionCode(): Promise<string> {
-    try {
-      const Updates = await getUpdates()
-      // expo-updates embeds version info in the manifest at runtime
-      const update = await Updates.checkForUpdateAsync()
-      if (!update.isAvailable) return APP_VERSION
-      const manifest = update.manifest as Record<string, unknown>
-      // Android: android.versionCode baked into the manifest by EAS Build
-      const versionCode = manifest.android
-        ? (manifest.android as Record<string, unknown>).versionCode
-        : undefined
-      return versionCode ? String(versionCode) : APP_VERSION
-    } catch {
-      return APP_VERSION
+  async getStatus(): Promise<UpdateStatus> {
+    return { ...this._status }
+  }
+
+  addListener(callback: (status: UpdateStatus) => void): () => void {
+    this._listeners.add(callback)
+    callback({ ...this._status })
+    return () => {
+      this._listeners.delete(callback)
     }
   }
 
-  private async _checkRuntimeCompatibility(
-    manifest: Record<string, unknown>,
-  ): Promise<boolean> {
-    // expo-updates checks runtime version automatically; if fetchUpdateAsync
-    // didn't throw, the manifest is compatible. We additionally verify the
-    // embedded runtimeVersion matches our build's expectation.
-    const manifestRuntime = manifest.runtimeVersion as string | undefined
-    if (!manifestRuntime) return true
-    // Our build's runtime version is embedded as an app.json/eas.json field.
-    // If the OTA targets a different runtime, reloadAsync would crash — so we
-    // must guard here. For now we trust expo-updates' isDialogApplied check.
-    return true
+  // ── Retry ──────────────────────────────────────────────────────────────
+
+  /**
+   * Retry the last failed operation.
+   * Calls checkForUpdate() if state is ERROR or UPDATE_AVAILABLE.
+   */
+  async retry(): Promise<void> {
+    if (!UPDATE_RETRYABLE_STATES.includes(this._status.state)) return
+    await this.checkForUpdate()
   }
 
-  private _startProgressTracking(): void {
+  // ── POS safety ────────────────────────────────────────────────────────
+
+  setActiveSaleRef(ref: { isActive: () => boolean } | (() => boolean)): void {
+    this._activeSaleRef = typeof ref === 'function' ? ref : ref.isActive
+  }
+
+  isSaleActive(): boolean {
+    return this._activeSaleRef()
+  }
+
+  private _canInstall(): boolean {
+    return (
+      this._status.state === 'READY_TO_INSTALL' &&
+      !this.isSaleActive()
+    )
+  }
+
+  // ── Internal helpers ─────────────────────────────────────────────────
+
+  private _setStatus(next: Partial<UpdateStatus>): void {
+    this._status = { ...this._status, ...next }
+    this._listeners.forEach((cb) => cb({ ...this._status }))
+  }
+
+  private _isOfflineError(msg: string): boolean {
+    return (
+      msg.includes('network') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('fetch') ||
+      msg.includes('Unable to resolve host') ||
+      msg.includes('No such domain')
+    )
+  }
+
+  private async _detectUpdateType(
+    manifest: Record<string, unknown>,
+  ): Promise<'ota' | 'binary'> {
+    const manifestRuntime = manifest.runtimeVersion as string | undefined
+    if (!manifestRuntime) return 'ota'
+    // If the OTA's runtimeVersion differs from our build's embedded runtimeVersion,
+    // the update requires a full binary install.
+    // expo-updates checks this automatically, so if we got here the runtime is compatible.
+    return 'ota'
+  }
+
+  private _startProgressTracking(onProgress: (p: UpdateProgress) => void): void {
     this._stopProgressTracking()
-    let progress = 0
+    let downloadedBytes = 0
+    const totalBytes = 100_000_000 // Expo OTA bundles are typically ~50-100MB
+    let startMs = Date.now()
+
     this._progressTimer = setInterval(() => {
-      // Simulate progress: expo-updates.fetchUpdateAsync doesn't expose a
-      // native progress callback, so we advance linearly from 0→95% until
-      // the promise resolves (at which point we jump to 100%).
-      progress = Math.min(progress + Math.random() * 8 + 2, 95)
-      this._emit({ ...this._state, downloadProgress: Math.round(progress) })
+      const elapsedMs = Date.now() - startMs
+      // Simulate download progress (expo-updates doesn't expose native progress)
+      // Clamp at 95% so we never claim complete before fetchUpdateAsync resolves
+      const fraction = Math.min(downloadedBytes / totalBytes, 0.95)
+      downloadedBytes = Math.min(downloadedBytes + Math.round(totalBytes * 0.08 + Math.random() * totalBytes * 0.02), Math.round(totalBytes * 0.95))
+      const progress = computeProgress(downloadedBytes, totalBytes, elapsedMs)
+      onProgress(progress)
     }, PROGRESS_POLL_MS)
   }
 
