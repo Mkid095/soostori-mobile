@@ -16,6 +16,9 @@ import { isNewDevice, importCloudSnapshot } from '../src/services/db-device-reco
 import { cloudDownloadSnapshot } from '../src/services/cloud-snapshot'
 import { getSession } from '../src/services/cloud-auth'
 import { attachSdkBridges } from '../src/services/sdk-bridge/bootstrap'
+import { mobileUpdateManager } from '../src/services/adapters/updates/mobile-update-manager'
+import { UpdateBanner } from '../src/components/shared/update-banner'
+import { getUpdateState } from '../src/services/db-update-state'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -34,6 +37,25 @@ export default function RootLayout() {
     if (!dbReady) return
     const detach = attachSdkBridges()
     return detach
+  }, [dbReady])
+
+  // Check for a pending update from a previous session on app start
+  useEffect(() => {
+    if (!dbReady) return
+    ;(async () => {
+      try {
+        const saved = await getUpdateState()
+        if (
+          saved.downloadedVersion &&
+          saved.updateType === 'OTA' &&
+          saved.isRuntimeCompatible === 1
+        ) {
+          mobileUpdateManager.checkForUpdates()
+        }
+      } catch {
+        // silently ignore — update check is non-critical
+      }
+    })()
   }, [dbReady])
 
   useEffect(() => {
@@ -118,6 +140,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <MenuProvider>
           <StatusBar style="dark" />
+          <UpdateBanner />
           <Stack screenOptions={{ headerShown: false }}>
             {authState === 'welcome' && (
               <Stack.Screen name="welcome" options={{ animation: 'fade' }} />

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Mobile OTA Update Adapter
+
+- **`src/services/adapters/updates/mobile-update-manager.ts`**: singleton `MobileUpdateManager` wrapping expo-updates with binary vs OTA detection, runtime compatibility checks, background download with progress tracking, POS safety gate, and offline returns CURRENT not ERROR
+- **`src/services/db-update-state.ts`**: persists update state (last check time, downloaded version) to SQLite so pending updates survive app restarts
+- **`src/components/shared/update-banner.tsx`**: global UI banner showing update state (CURRENT/CHECKING/DOWNLOADING/READY_TO_INSTALL/INSTALLING/ERROR) with Install and Retry actions; uses Lucide icons (CheckCircle2, AlertCircle, Download, RefreshCw, ChevronRight)
+- **`src/lib/db-schema.ts`**: added `update_state` table via migration
+- **`app/_layout.tsx`**: mounts `UpdateBanner` after DB init; on startup checks `update_state` for a pending OTA from a previous session
+- **`src/services/adapters/updates/__tests__/mobile-update-manager.test.ts`**: contract tests covering all 7 scenarios (CURRENT, DOWNLOADING, progress tracking, READY_TO_INSTALL, binary detection, offline safety, POS sale gate, listener immediate emit, singleton)
+
 ### SDK Bridge — Events, Audit, Notifications, Subscription
 
 - **SDK bridge layer** (`src/services/sdk-bridge/`): wires all `@soostori/*` SDK packages into the mobile app

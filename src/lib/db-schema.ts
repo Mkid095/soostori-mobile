@@ -348,6 +348,15 @@ export async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_sync_conflicts_shop
       ON sync_conflicts(shop_id, status);
+
+    CREATE TABLE IF NOT EXISTS update_state (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      last_checked_at TEXT,
+      downloaded_version TEXT,
+      update_type TEXT,
+      is_runtime_compatible INTEGER DEFAULT 1,
+      downloaded_at TEXT
+    );
   `)
 
   // ── Seed rows ────────────────────────────────────────────────────────────

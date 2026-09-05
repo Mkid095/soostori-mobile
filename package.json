@@ -38,6 +38,7 @@
     "expo-sharing": "^57.0.1",
     "expo-sqlite": "^57.0.1",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "^57.0.21",
     "lucide-react-native": "^1.28.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -51,7 +52,10 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
+    "jest": "^30.5.1",
+    "ts-jest": "^29.4.12",
     "tsx": "^4.19.2",
     "typescript": "~6.0.3"
   },
