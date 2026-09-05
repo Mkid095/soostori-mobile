@@ -3,6 +3,8 @@ import { getDb } from '../lib/db'
 import type { Employee, EmployeeRole } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
 import { logAudit } from './db-audit'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 const PBKDF2_ITERATIONS = 100_000
 
@@ -89,6 +91,7 @@ export async function createEmployee(
   email?: string,
   phone?: string,
 ): Promise<Employee> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.TEAM_MANAGE)
   const db = await getDb()
   const { hash, salt } = await hashPin(pin)
   const id = generateId()
@@ -103,6 +106,7 @@ export async function createEmployee(
 }
 
 export async function updateEmployeePin(id: string, pin: string): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.TEAM_MANAGE)
   const db = await getDb()
   const { hash, salt } = await hashPin(pin)
   const now = new Date().toISOString()

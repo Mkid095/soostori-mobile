@@ -4,6 +4,8 @@ import { getDb } from '../lib/db'
 import type { Debt, DebtPayment } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 export async function getTotalDebtCollected(): Promise<number> {
   const db = await getDb()
@@ -49,6 +51,7 @@ export async function createDebt(data: {
   saleId?: string
   customerId?: string
 }): Promise<Debt> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.DEBT_MANAGE)
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()
@@ -79,6 +82,7 @@ export async function recordDebtPayment(
   reference?: string,
   notes?: string
 ): Promise<Debt | null> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.DEBT_MANAGE)
   const db = await getDb()
   const debt = await getDebtById(debtId)
   if (!debt) return null

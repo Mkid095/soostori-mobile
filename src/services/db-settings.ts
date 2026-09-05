@@ -2,6 +2,8 @@
 
 import { getDb } from '../lib/db'
 import type { ShopSettings, PaymentChannels } from '../lib/types'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 const DEFAULT_CHANNELS: PaymentChannels = {
   cash: true,
@@ -46,6 +48,7 @@ export async function getShopSettings(): Promise<ShopSettings | null> {
 }
 
 export async function updateShopSettings(data: Partial<ShopSettings>): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.SHOP_SETTINGS)
   const db = await getDb()
   const now = new Date().toISOString()
 

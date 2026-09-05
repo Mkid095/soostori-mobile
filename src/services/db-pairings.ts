@@ -2,6 +2,8 @@
 import { getDb } from '../lib/db'
 import type { DevicePairing, PairingStatus } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 function mapRow(row: Record<string, unknown>): DevicePairing {
   return {
@@ -36,6 +38,7 @@ export async function approvePairing(
   pairingId: string,
   approvedBy: string,
 ): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.DEVICE_APPROVE)
   const db = await getDb()
   const now = new Date().toISOString()
   await db.runAsync(
@@ -45,6 +48,7 @@ export async function approvePairing(
 }
 
 export async function rejectPairing(pairingId: string): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.DEVICE_APPROVE)
   const db = await getDb()
   await db.runAsync(
     `UPDATE device_pairings SET status = 'rejected' WHERE id = ?`,

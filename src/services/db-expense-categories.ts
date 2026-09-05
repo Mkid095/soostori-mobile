@@ -4,6 +4,8 @@ import { getDb } from '../lib/db'
 import type { ExpenseCategory } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 export async function getAllExpenseCategories(): Promise<ExpenseCategory[]> {
   const db = await getDb()
@@ -26,6 +28,7 @@ export async function createExpenseCategory(data: {
   color?: string
   icon?: string
 }): Promise<ExpenseCategory> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()
@@ -42,6 +45,7 @@ export async function updateExpenseCategory(
   id: string,
   data: { name?: string; color?: string; icon?: string }
 ): Promise<ExpenseCategory | null> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   const fields: string[] = []
   const values: (string | number | null)[] = []
@@ -59,6 +63,7 @@ export async function updateExpenseCategory(
 }
 
 export async function deleteExpenseCategory(id: string): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   await db.runAsync(
     'UPDATE expense_categories SET is_active = 0 WHERE id = ?', [id]

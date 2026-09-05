@@ -14,6 +14,7 @@ import { SALE_COMPLETED, SALE_PENDING, SALE_CONFIRMED } from './sdk-bridge/sdk-b
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { getMobilePrimaryStatus } from './adapters/devices/mobile-primary-coordinator'
 import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
+import { getCurrentRole } from './session-helper'
 
 async function resolveShopId(): Promise<string> {
   const stored = await AsyncStorage.getItem('@soostori:shopId')
@@ -50,6 +51,10 @@ export async function createSale(
       throw new InsufficientStockError(item.productName, item.quantity, available)
     }
   }
+
+  // Subscription + RBAC enforcement at service boundary
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.POS_SELL)
 
   await db.runAsync(
     `INSERT INTO sales (id, type, status, subtotal, discount_amount, total_amount, paid_amount, payment_method, note, customer_id_number, items, items_summary, created_at, updated_at)
@@ -98,6 +103,10 @@ export async function createSaleOffline(
   discountAmount: number,
   totalAmount: number,
 ): Promise<Sale> {
+  // Subscription + RBAC enforcement at service boundary
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.POS_SELL)
+
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()

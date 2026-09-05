@@ -12,7 +12,11 @@ All notable changes to this project will be documented in this file.
 - **`sdk-audit-recorder.ts`**: attaches `@soostori/audit.AuditRecorder` to the SDK event bus via `attachSdkAuditRecorder()`
 - **`sdk-notifications.ts`**: subscribes to SDK event bus; persists notifications to `notifications` table; `SUBSCRIPTION_EXPIRING_SOON` mapped from `@soostori/notifications` (SDK GAP — package not yet published)
 - **`subscription-gate.ts`**: wraps `enforceSubscription`; `SubscriptionBlockedError` thrown when cached entitlement forbids POS ops
-- **`rbac.ts`**: `PERMISSIONS` const + `enforcePermission()`; service-layer enforcement for all POS operations
+- **`rbac.ts`**: `PERMISSIONS` const + `roleHas()` + `enforcePermission()`; maps coarse Mobile permission names to fine-grained SDK permission names via `SDK_PERMISSION_MAP`; `PermissionDeniedError` thrown at service boundary
+- **`session-helper.ts`**: `getCurrentRole()` reads current employee role from AsyncStorage
+- **RBAC enforcement added to**: `db-sales.ts` (POS_SELL), `db-products.ts` (INVENTORY_EDIT, PRODUCT_DELETE, INVENTORY_ADJUST), `db-expenses.ts` (EXPENSES_MANAGE), `db-expense-categories.ts` (EXPENSES_MANAGE), `db-customers.ts` (CUSTOMERS_MANAGE), `db-debts.ts` (DEBT_MANAGE), `db-employees.ts` (TEAM_MANAGE), `db-pairings.ts` (DEVICE_APPROVE), `db-settings.ts` (SHOP_SETTINGS), `db-devices.ts` (HOST_SHOULDER)
+- **`sdk-bridge/__tests__/rbac-enforcement.test.ts`**: standalone test (66/66 pass) verifying PERMISSIONS values, PermissionDeniedError, roleHas for all roles, and enforcePermission allow/deny across all 16 permission names
+- **Manager role corrected**: `employee.view` + `employee.create` + `employee.update` per actual SDK — `roleHas('manager', 'team.manage')` now returns `true` (not `false` as previously tested)
 - **`bootstrap.ts`**: `attachSdkBridges()` entry point; called from `app/_layout.tsx` after DB init
 - **`db-schema.ts`**: `audit_logs` table extended with `event_id`, `event_name`, `actor_type`, `shop_id` columns via migration
 - **Adapter layer fixes**: `mobile-products-repository`, `mobile-customers-repository`, `mobile-debts-repository`, `mobile-inventory-repository` all updated to match SDK contracts

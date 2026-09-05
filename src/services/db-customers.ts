@@ -5,6 +5,8 @@ import { getDb } from '../lib/db'
 import type { Customer, Sale } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 export async function searchCustomers(query: string): Promise<Customer[]> {
   const db = await getDb()
@@ -37,6 +39,7 @@ export async function createCustomer(data: {
   phone?: string
   idNumber?: string
 }): Promise<Customer> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()
@@ -53,6 +56,7 @@ export async function updateCustomer(
   id: string,
   data: { name?: string; phone?: string; idNumber?: string }
 ): Promise<Customer | null> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const now = new Date().toISOString()
   const fields: string[] = []
@@ -70,6 +74,7 @@ export async function updateCustomer(
 }
 
 export async function deactivateCustomer(id: string): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const now = new Date().toISOString()
   await db.runAsync(

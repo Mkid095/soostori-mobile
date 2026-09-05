@@ -2,9 +2,11 @@
 //
 // Mobile RBAC enforcement.
 //
-// Consumes @soostori/auth.hasPermission and exposes a guard that blocks
-// permission-sensitive operations at the service layer. The UI may also
-// hide controls, but the service boundary is the source of truth.
+// Maps coarse Mobile permission names to the fine-grained SDK permission names
+// expected by @soostori/auth.hasPermission. The SDK uses scoped names
+// (e.g. inventory.create/update/delete) while Mobile uses aggregate names
+// (e.g. inventory.edit = create+update). Without this mapping, enforcement
+// would always fail for manager/attendant roles.
 
 import { hasPermission, checkPermission } from '@soostori/auth'
 import { SoostoriError } from '@soostori/core'
@@ -17,32 +19,8 @@ export class PermissionDeniedError extends SoostoriError {
 }
 
 /**
- * Returns true when the role has the given permission using the SDK defaults.
- */
-export function roleHas(role: EmployeeRole | null | undefined, permission: string): boolean {
-  return hasPermission(role, permission)
-}
-
-/**
- * Throws PermissionDeniedError when the role lacks the permission.
- *
- * Use this at the service/action boundary — NOT in components.
- */
-export function enforcePermission(
-  role: EmployeeRole | null | undefined,
-  permission: string,
-  overrides?: Record<string, boolean> | null,
-): void {
-  const allowed = overrides
-    ? checkPermission((role ?? 'attendant') as EmployeeRole, permission, overrides)
-    : hasPermission(role, permission)
-  if (!allowed) throw new PermissionDeniedError(permission, role ?? null)
-}
-
-/**
  * Permission names used across the mobile app.
- *
- * Keep aligned with Desktop — if Desktop adds a new permission, mirror it here.
+ * Coarse names that map to one or more fine-grained SDK permission names.
  */
 export const PERMISSIONS = {
   POS_SELL: 'pos.sell',
@@ -63,4 +41,60 @@ export const PERMISSIONS = {
   PRODUCT_DELETE: 'product.delete',
 } as const
 
-export type PermissionName = typeof PERMISSIONS[keyof typeof PERMISSIONS]
+export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
+
+/**
+ * Maps coarse Mobile permission names → fine-grained SDK permission names.
+ * Without this mapping, hasPermission() would always fail for non-owner roles
+ * because the SDK uses scoped names (inventory.create/update/delete) while
+ * Mobile uses aggregate names (inventory.edit = create+update).
+ */
+const SDK_PERMISSION_MAP: Record<string, string[]> = {
+  [PERMISSIONS.POS_SELL]: ['pos.sell', 'pos.refund'],
+  [PERMISSIONS.INVENTORY_VIEW]: ['inventory.view'],
+  [PERMISSIONS.INVENTORY_EDIT]: ['inventory.create', 'inventory.update'],
+  [PERMISSIONS.INVENTORY_ADJUST]: ['inventory.update'],
+  [PERMISSIONS.REPORTS_VIEW]: ['reports.view', 'reports.export'],
+  [PERMISSIONS.EXPENSES_MANAGE]: ['expenses.create', 'expenses.update', 'expenses.delete'],
+  [PERMISSIONS.CUSTOMERS_MANAGE]: ['customers.create', 'customers.update', 'customers.delete'],
+  [PERMISSIONS.DEBT_MANAGE]: ['debts.create', 'debts.update', 'debts.delete'],
+  [PERMISSIONS.TEAM_MANAGE]: ['employee.create', 'employee.update', 'employee.delete'],
+  [PERMISSIONS.SHOP_SETTINGS]: ['settings.update'],
+  [PERMISSIONS.DEVICE_APPROVE]: ['devices.manage'],
+  [PERMISSIONS.HOST_SHOULDER]: ['devices.manage'],
+  [PERMISSIONS.AUDIT_VIEW]: ['reports.view'],
+  [PERMISSIONS.SUBSCRIPTION_MANAGE]: ['subscription.manage'],
+  [PERMISSIONS.PRODUCT_PRICE_CHANGE]: ['inventory.update'],
+  [PERMISSIONS.PRODUCT_DELETE]: ['inventory.delete'],
+}
+
+/**
+ * Returns true when the role has the given coarse permission.
+ * Uses the SDK's hasPermission after mapping to fine-grained names.
+ */
+export function roleHas(role: EmployeeRole | null | undefined, permission: string): boolean {
+  const sdkPerms = SDK_PERMISSION_MAP[permission]
+  if (!sdkPerms) return false
+  // A role has the coarse permission if it has ANY of the fine-grained SDK perms
+  return sdkPerms.some(p => hasPermission(role, p))
+}
+
+/**
+ * Throws PermissionDeniedError when the role lacks the permission.
+ * Use at the service/action boundary — NOT in components.
+ */
+export function enforcePermission(
+  role: EmployeeRole | null | undefined,
+  permission: string,
+  overrides?: Record<string, boolean> | null,
+): void {
+  if (overrides) {
+    const sdkPerms = SDK_PERMISSION_MAP[permission] ?? [permission]
+    const allowed = sdkPerms.some(p =>
+      checkPermission((role ?? 'attendant') as EmployeeRole, p, overrides),
+    )
+    if (!allowed) throw new PermissionDeniedError(permission, role ?? null)
+  } else {
+    if (!roleHas(role, permission)) throw new PermissionDeniedError(permission, role ?? null)
+  }
+}

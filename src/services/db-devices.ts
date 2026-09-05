@@ -2,6 +2,8 @@
 import { getDb } from '../lib/db'
 import type { Device, DeviceType } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 function mapRow(row: Record<string, unknown>): Device {
   return {
@@ -61,6 +63,7 @@ export async function updateDeviceLastSeen(id: string): Promise<void> {
 }
 
 export async function setDeviceHost(id: string, isHost: boolean): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.HOST_SHOULDER)
   const db = await getDb()
   await db.runAsync('UPDATE devices SET is_host = ? WHERE id = ?', [isHost ? 1 : 0, id])
 }

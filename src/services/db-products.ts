@@ -7,6 +7,8 @@ import { queueSync } from './sync-queue-helper'
 import { mapProductRow } from './db-products-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
 import { logAudit } from './db-audit'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { getCurrentRole } from './session-helper'
 
 export async function getAllProducts(): Promise<Product[]> {
   const db = await getDb()
@@ -46,6 +48,7 @@ export async function searchProducts(query: string): Promise<Product[]> {
 }
 
 export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()
@@ -83,6 +86,7 @@ const FIELD_MAP: { js: keyof Product; col: string; coerce?: (v: unknown) => numb
 ]
 
 export async function updateProduct(id: string, data: Partial<Product>): Promise<Product> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
   const oldProduct = await getProductById(id)
   const priceChanged = data.sellingPrice !== undefined || data.costPrice !== undefined
 
@@ -119,6 +123,7 @@ export async function updateProduct(id: string, data: Partial<Product>): Promise
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.PRODUCT_DELETE)
   const db = await getDb()
   await db.runAsync('UPDATE products SET is_active = 0, updated_at = ? WHERE id = ?', [new Date().toISOString(), id])
   await queueSync('products', 'delete', id)
@@ -152,6 +157,7 @@ export async function adjustStock(
   reason: string,
   shopId?: string,
 ): Promise<void> {
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_ADJUST)
   const prod = await getProductById(productId)
   const delta = quantity > 0 ? `+${quantity}` : `${quantity}`
   await logAudit(
