@@ -79,6 +79,14 @@ export async function createSale(
 
   await queueSync('sales', 'create', id, shopId || undefined)
   await logAudit(shopId || 'default', 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod }))
+  // Publish canonical SDK event for audit, notifications, and UI subscriptions
+  await publishSdkEvent({
+    name: 'sale.completed',
+    entity: 'sale',
+    entityId: id,
+    payload: { saleId: id, total: totalAmount },
+    source: 'local',
+  })
   return (await getSaleById(id))!
 }
 
@@ -124,6 +132,14 @@ export async function createSaleOffline(
   }
 
   await queueSync('sales', 'create', id, shopId || undefined)
+  // Publish canonical SDK event for audit, notifications, and UI subscriptions
+  await publishSdkEvent({
+    name: 'sale.completed',
+    entity: 'sale',
+    entityId: id,
+    payload: { saleId: id, total: totalAmount },
+    source: 'local',
+  })
   return (await getSaleById(id))!
 }
 
