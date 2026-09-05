@@ -17,7 +17,8 @@ All notable changes to this project will be documented in this file.
 - **`db-schema.ts`**: `audit_logs` table extended with `event_id`, `event_name`, `actor_type`, `shop_id` columns via migration
 - **Adapter layer fixes**: `mobile-products-repository`, `mobile-customers-repository`, `mobile-debts-repository`, `mobile-inventory-repository` all updated to match SDK contracts
 - **`mobile-queue-storage.ts`**: `sale.created` event mapping corrected to `sale.completed`
-- **Tests**: all adapter tests pass (5/5)
+- **Tests**: all adapter tests pass (74/74 across 8 test suites)
+- **`db-sales.ts`**: `createSale` and `createSaleOffline` now call `publishSdkEvent('sale.completed', ...)` so the SDK event bus fans out to audit, notifications, and UI subscribers
 
 ### Phase 3 — Conflict Handling
 - **db-conflicts.ts enhanced**: `resolveConflict` now supports PARTIAL_FULFILL/CANCEL/ESCALATE; `applyPartialFulfillment` for partial inventory restoration
