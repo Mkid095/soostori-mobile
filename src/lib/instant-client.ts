@@ -2,7 +2,7 @@
 // Uses @fidscript/instant-react which wraps @fidscript/instant-sdk
 import { init, i, id, tx, lookup } from '@fidscript/instant-react'
 
-const APP_ID = '0808ca7d-b0ba-4541-8906-48f7d0403950'
+const APP_ID = '487be5c5-7615-4bbd-b3b7-3aa97154ca99'
 
 const schema = i.schema({
   entities: {
@@ -31,6 +31,7 @@ const schema = i.schema({
       permissions: i.any(),
       createdBy: i.string(),
       invitedBy: i.string(),
+      cloudId: i.string(),
     }),
     devices: i.entity({
       id: i.string().unique().indexed(),
@@ -39,6 +40,9 @@ const schema = i.schema({
       deviceName: i.string(),
       deviceType: i.string(),
       isLanHost: i.boolean(),
+      isPrimary: i.boolean(),
+      hasPin: i.boolean(),
+      pinSetupAt: i.string(),
       status: i.string(),
       lastSeenAt: i.string(),
       authorizedAt: i.string(),
@@ -64,11 +68,17 @@ const schema = i.schema({
     }),
     syncEvents: i.entity({
       id: i.string().unique().indexed(),
+      shopId: i.string().indexed(),
       entityId: i.string(),
       entity: i.string(),
       operation: i.string(),
       payload: i.any(),
       syncedAt: i.string(),
+      version: i.number(),
+      idempotencyKey: i.string(),
+      timestamp: i.string(),
+      sequenceNumber: i.number(),
+      deviceId: i.string(),
     }),
     backupSnapshots: i.entity({
       id: i.string().unique().indexed(),

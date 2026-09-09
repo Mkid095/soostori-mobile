@@ -86,7 +86,7 @@ async function run(): Promise<void> {
   assert('[2] saveSession() wrote to storage', mock.store.has('soostori:session'))
 
   // [3] loadSession via SDK helper retrieves from storage
-  const loaded = await loadSession(storage)
+  const loaded = await loadSession(storage) as AuthSession | null
   assert('[3] loadSession() returns a session', loaded?.userId === 'u-1')
 
   // [4] Serialization round-trips
@@ -94,7 +94,7 @@ async function run(): Promise<void> {
 
   // [5] clearSession removes the key
   await clearSession(storage)
-  const cleared = await loadSession(storage)
+  const cleared = await loadSession(storage) as AuthSession | null
   assert('[5] clearSession() empties storage', cleared === null)
 
   console.log(`\nTotal: ${passed} passed, ${failed} failed`)

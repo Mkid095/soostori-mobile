@@ -1,49 +1,39 @@
 // app/(tabs)/low-stock.tsx — Dedicated low-stock view with quick restock
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { View, Text, TouchableOpacity, FlatList, RefreshControl, StyleSheet, Alert, TextInput } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { AlertTriangle, Package, Plus, RefreshCw, X } from 'lucide-react-native'
+import { AlertTriangle, Package, X } from 'lucide-react-native'
 import { useTheme } from '../../src/hooks/useTheme'
 import type { Product } from '../../src/lib/types'
-import { getLowStockProducts, adjustStock } from '../../src/services/db-products'
+import { useLowStockProducts } from '../../src/hooks/useLowStockProducts'
+import { LowStockRow } from '../../src/components/low-stock/low-stock-row'
 
 export default function LowStockScreen() {
   const theme = useTheme()
   const { bg, card, text, textSecondary: muted, border, brand: orange, success, danger } = theme
   const router = useRouter()
+  const { products, refreshing, load, handleRestock } = useLowStockProducts()
 
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [restockingProduct, setRestockingProduct] = useState<Product | null>(null)
   const [restockQty, setRestockQty] = useState('')
 
-  const load = useCallback(async () => {
-    setProducts(await getLowStockProducts())
-    setLoading(false)
-  }, [])
+  const totalToRestock = products.reduce((sum, p) => sum + Math.max(0, p.lowStockThreshold - p.stockQuantity), 0)
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await load()
-    setRefreshing(false)
-  }, [load])
-
-  const handleRestock = async () => {
-    if (!restockingProduct) return
-    const qty = parseInt(restockQty)
-    if (isNaN(qty) || qty <= 0) {
-      Alert.alert('Invalid', 'Enter a valid quantity')
-      return
-    }
-    await adjustStock(restockingProduct.id, qty, 'Restock')
-    setRestockingProduct(null)
-    setRestockQty('')
-    await load()
+  function handleRestockPress(product: Product) {
+    const deficit = product.lowStockThreshold - product.stockQuantity
+    setRestockingProduct(product)
+    setRestockQty(String(deficit))
   }
 
-  const totalToRestock = products.reduce((sum, p) => sum + (p.lowStockThreshold - p.stockQuantity), 0)
+  async function handleRestockSave() {
+    if (!restockingProduct) return
+    const qty = parseInt(restockQty)
+    if (isNaN(qty) || qty <= 0) { Alert.alert('Invalid', 'Enter a valid quantity'); return }
+    await handleRestock(restockingProduct.id, qty)
+    setRestockingProduct(null)
+    setRestockQty('')
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
@@ -76,46 +66,21 @@ export default function LowStockScreen() {
       <FlatList
         data={products}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={orange} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={orange} />}
         contentContainerStyle={{ padding: 12, gap: 10 }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Package size={48} color={muted} />
             <Text style={{ fontSize: 15, fontWeight: '700', color: text, marginTop: 12 }}>All Stocked Up</Text>
-            <Text style={{ fontSize: 13, color: muted, textAlign: 'center', marginTop: 4 }}>
-              No products are below their low-stock threshold
-            </Text>
+            <Text style={{ fontSize: 13, color: muted, textAlign: 'center', marginTop: 4 }}>No products are below their low-stock threshold</Text>
           </View>
         }
-        renderItem={({ item }) => {
-          const deficit = item.lowStockThreshold - item.stockQuantity
-          return (
-            <View style={[styles.row, { backgroundColor: card, borderColor: border }]}>
-              <View style={[styles.colorDot, { backgroundColor: item.categoryColor || '#94A3B8' }]} />
-              <View style={styles.rowInfo}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: text }} numberOfLines={1}>{item.name}</Text>
-                <Text style={{ fontSize: 12, color: muted }}>
-                  Stock: {item.stockQuantity} / Threshold: {item.lowStockThreshold}
-                </Text>
-              </View>
-              <View style={styles.rowRight}>
-                <Text style={{ fontSize: 13, fontWeight: '800', color: danger }}>-{deficit}</Text>
-                <TouchableOpacity
-                  style={[styles.restockBtn, { backgroundColor: orange }]}
-                  onPress={() => { setRestockingProduct(item); setRestockQty(String(deficit)) }}
-                >
-                  <Plus size={14} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Restock</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )
-        }}
+        renderItem={({ item }) => <LowStockRow product={item} onRestock={handleRestockPress} orange={orange} />}
       />
 
       {/* Restock Modal */}
       {restockingProduct && (
-        <View style={[styles.modalOverlay]}>
+        <View style={styles.modalOverlay}>
           <View style={[styles.modal, { backgroundColor: card, borderWidth: 1, borderColor: border }]}>
             <View style={styles.modalHeader}>
               <Text style={{ fontSize: 16, fontWeight: '800', color: text }}>Restock</Text>
@@ -132,9 +97,7 @@ export default function LowStockScreen() {
               <Text style={{ fontSize: 20, color: muted }}>→</Text>
               <View style={styles.stockBox}>
                 <Text style={{ fontSize: 11, color: muted }}>After</Text>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: success }}>
-                  {restockingProduct.stockQuantity + (parseInt(restockQty) || 0)}
-                </Text>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: success }}>{restockingProduct.stockQuantity + (parseInt(restockQty) || 0)}</Text>
               </View>
             </View>
             <TextInput
@@ -146,23 +109,14 @@ export default function LowStockScreen() {
               onChangeText={setRestockQty}
             />
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity
-                style={[styles.qtyBtn, { backgroundColor: bg, borderColor: border }]}
-                onPress={() => setRestockQty((q) => String(Math.max(1, parseInt(q || '1') - 1)))}
-              >
+              <TouchableOpacity style={[styles.qtyBtn, { backgroundColor: bg, borderColor: border }]} onPress={() => setRestockQty((q) => String(Math.max(1, parseInt(q || '1') - 1)))}>
                 <Text style={{ fontSize: 18, fontWeight: '700', color: text }}>−</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.qtyBtn, { backgroundColor: bg, borderColor: border }]}
-                onPress={() => setRestockQty((q) => String(parseInt(q || '0') + 1))}
-              >
+              <TouchableOpacity style={[styles.qtyBtn, { backgroundColor: bg, borderColor: border }]} onPress={() => setRestockQty((q) => String(parseInt(q || '0') + 1))}>
                 <Text style={{ fontSize: 18, fontWeight: '700', color: text }}>+</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: success }]}
-              onPress={handleRestock}
-            >
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: success }]} onPress={handleRestockSave}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Save</Text>
             </TouchableOpacity>
           </View>
@@ -180,11 +134,6 @@ const styles = StyleSheet.create({
   summaryItem: { flex: 1, alignItems: 'center' },
   divider: { width: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
-  row: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, padding: 12, borderWidth: 1 },
-  colorDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
-  rowInfo: { flex: 1 },
-  rowRight: { alignItems: 'flex-end', gap: 6 },
-  restockBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modal: { width: '100%', borderRadius: 16, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },

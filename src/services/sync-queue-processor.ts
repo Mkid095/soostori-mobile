@@ -56,12 +56,15 @@ async function shouldSync(): Promise<boolean> {
 
 async function uploadEventBatch(events: QueuedEvent[]): Promise<void> {
   const { cloudUploadEvents } = await import('./cloud-sync-api')
+  const { getCurrentShopId } = await import('./session-helper')
+  const shopId = await getCurrentShopId()
+  if (!shopId) return
   await cloudUploadEvents(events.map(e => ({
-    id: e.id,
     tableName: e.tableName,
     action: e.action,
     payload: JSON.parse(e.payload),
     timestamp: new Date(e.createdAt).toISOString(),
+    shopId,
   })))
 }
 

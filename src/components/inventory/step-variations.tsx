@@ -3,6 +3,7 @@
 
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { Plus, Trash2 } from 'lucide-react-native'
+import { VariantStockAdjuster } from './variant-stock-adjuster'
 
 export interface VariantRow {
   id: string
@@ -12,6 +13,8 @@ export interface VariantRow {
   sellingPrice: string
   costPrice: string
   stockQuantity: string
+  /** Set by useWizardState when loading existing variants from DB */
+  persistedStock?: number
 }
 
 interface Props {
@@ -19,10 +22,11 @@ interface Props {
   onAdd: () => void
   onRemove: (index: number) => void
   onUpdate: (index: number, field: keyof VariantRow, value: string) => void
+  onStockChange: (index: number, newStock: number) => void
   c: Record<string, string>
 }
 
-export function renderVariationsStep({ variants, onAdd, onRemove, onUpdate, c }: Props) {
+export function renderVariationsStep({ variants, onAdd, onRemove, onUpdate, onStockChange, c }: Props) {
   const { card, border, text, textSecondary: muted, brand: orange } = c
 
   return (
@@ -111,6 +115,16 @@ export function renderVariationsStep({ variants, onAdd, onRemove, onUpdate, c }:
               />
             </View>
           </View>
+
+          {v.persistedStock !== undefined && (
+            <VariantStockAdjuster
+              variantId={v.id}
+              variantName={v.name || `Variant ${i + 1}`}
+              currentStock={v.persistedStock}
+              onAdjusted={(newStock) => onStockChange(i, newStock)}
+              c={c}
+            />
+          )}
         </View>
       ))}
 

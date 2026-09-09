@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Package, Search, Plus, Check, Minus } from 'lucide-react-native'
 import type { Product } from '../../src/lib/types'
 import { searchProducts, adjustStock } from '../../src/services/db-products'
+import { enforcePermission, PERMISSIONS } from '../../src/services/sdk-bridge/rbac'
+import { getCurrentRole } from '../../src/services/session-helper'
 import { formatCurrency } from '../../src/lib/formatters'
 import { useTheme } from '../../src/hooks/useTheme'
 import { AppHeader } from '../../src/components/shared/app-header'
@@ -42,6 +44,7 @@ export default function ReceiveScreen() {
 
   async function handleReceive() {
     if (received.length === 0) return
+    await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_ADJUST)
     for (const item of received) {
       await adjustStock(item.product.id, item.quantity, 'Stock received')
     }

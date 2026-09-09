@@ -1,12 +1,11 @@
 // Debt CRUD operations — business logic in services, NOT components
-
 import { getDb } from '../lib/db'
 import type { Debt, DebtPayment } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
 import { getCurrentRole } from './session-helper'
-
 export async function getTotalDebtCollected(): Promise<number> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -14,7 +13,6 @@ export async function getTotalDebtCollected(): Promise<number> {
   )
   return Number(row?.total ?? 0)
 }
-
 export async function getDebtCollectedByDateRange(start: string, end: string): Promise<number> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -23,7 +21,6 @@ export async function getDebtCollectedByDateRange(start: string, end: string): P
   )
   return Number(row?.total ?? 0)
 }
-
 export async function getAllDebts(): Promise<Debt[]> {
   const db = await getDb()
   const rows = await db.getAllAsync<Record<string, unknown>>(
@@ -31,7 +28,6 @@ export async function getAllDebts(): Promise<Debt[]> {
   )
   return rows.map(mapRow)
 }
-
 export async function getDebtById(id: string): Promise<Debt | null> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -42,7 +38,6 @@ export async function getDebtById(id: string): Promise<Debt | null> {
   await loadPayments(debt)
   return debt
 }
-
 export async function createDebt(data: {
   customerName?: string
   customerPhone?: string
@@ -51,6 +46,7 @@ export async function createDebt(data: {
   saleId?: string
   customerId?: string
 }): Promise<Debt> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.DEBT_MANAGE)
   const db = await getDb()
   const id = generateId()
@@ -74,7 +70,6 @@ export async function createDebt(data: {
   await queueSync('debts', 'create', id)
   return (await getDebtById(id))!
 }
-
 export async function recordDebtPayment(
   debtId: string,
   amount: number,
@@ -82,11 +77,11 @@ export async function recordDebtPayment(
   reference?: string,
   notes?: string
 ): Promise<Debt | null> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.DEBT_MANAGE)
   const db = await getDb()
   const debt = await getDebtById(debtId)
   if (!debt) return null
-
   const paymentId = generateId()
   const now = new Date().toISOString()
   await db.runAsync(
@@ -94,7 +89,6 @@ export async function recordDebtPayment(
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [paymentId, debtId, amount, paymentMethod, reference || null, notes || null, now]
   )
-
   const newPaid = debt.amountPaid + amount
   const newStatus = newPaid >= debt.amount ? 'paid' : 'partial'
   await db.runAsync(
@@ -104,7 +98,6 @@ export async function recordDebtPayment(
   await queueSync('debt_payments', 'create', paymentId)
   return getDebtById(debtId)
 }
-
 async function loadPayments(debt: Debt): Promise<void> {
   const db = await getDb()
   const rows = await db.getAllAsync<Record<string, unknown>>(
@@ -121,7 +114,6 @@ async function loadPayments(debt: Debt): Promise<void> {
     createdAt: String(row.created_at),
   }))
 }
-
 function mapRow(row: Record<string, unknown>): Debt {
   return {
     id: String(row.id),
@@ -138,7 +130,6 @@ function mapRow(row: Record<string, unknown>): Debt {
     updatedAt: String(row.updated_at),
   }
 }
-
 export async function getPendingDebtCount(): Promise<number> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(

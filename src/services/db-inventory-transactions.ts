@@ -12,6 +12,7 @@ export async function recordInventoryTransaction(
   createdBy?: string,
   deviceId?: string,
   variantName?: string,
+  variantId?: string,
   referenceId?: string,
   reason?: string,
 ): Promise<InventoryTransaction> {
@@ -31,9 +32,9 @@ export async function recordInventoryTransaction(
 
   await db.runAsync(
     `INSERT INTO inventory_transactions
-       (id, shop_id, product_id, variant_name, type, quantity, balance_after, created_by, device_id, reference_id, reason, timestamp)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, shopId, productId, variantName ?? null, type, quantity, balanceAfter, createdBy ?? null, deviceId ?? null, referenceId ?? null, reason ?? null, now]
+       (id, shop_id, product_id, variant_id, variant_name, type, quantity, balance_after, created_by, device_id, reference_id, reason, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, shopId, productId, variantId ?? null, variantName ?? null, type, quantity, balanceAfter, createdBy ?? null, deviceId ?? null, referenceId ?? null, reason ?? null, now]
   )
 
   // Update products.current_stock cache
@@ -54,10 +55,11 @@ export async function getTransactionsByProduct(
     `SELECT * FROM inventory_transactions WHERE product_id = ? ORDER BY timestamp DESC LIMIT ?`,
     [productId, limit]
   )
-  return rows.map(row => ({
+  return rows.map((row: Record<string, unknown>) => ({
     id: String(row.id),
     shopId: String(row.shop_id),
     productId: String(row.product_id),
+    variantId: row.variant_id ? String(row.variant_id) : undefined,
     variantName: row.variant_name ? String(row.variant_name) : undefined,
     type: String(row.type) as InventoryTransactionType,
     quantity: Number(row.quantity),

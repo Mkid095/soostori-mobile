@@ -1,43 +1,29 @@
 // Debt/Customer payment panel for PosCheckoutModal
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
-import { Search, Plus, User, Phone, X } from 'lucide-react-native'
+import { Search, Plus, User, X } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
-import type { Customer } from '../../lib/types'
-import { searchCustomers, createCustomer } from '../../services/db-customers'
+import { useDebtCustomerSearch } from '../../hooks/useDebtCustomerSearch'
 
 interface Props {
-  customerSearch: string
-  onCustomerSearchChange: (v: string) => void
-  customerResults: Customer[]
-  selectedCustomer: Customer | null
-  onSelectCustomer: (c: Customer) => void
-  newCustomerName: string
-  onNewCustomerNameChange: (v: string) => void
-  newCustomerPhone: string
-  onNewCustomerPhoneChange: (v: string) => void
-  newCustomerId: string
-  onNewCustomerIdChange: (v: string) => void
-  showNewCustomer: boolean
-  onShowNewCustomer: (v: boolean) => void
-  onCreateCustomer: () => void
-  isCreatingCustomer: boolean
-  onClearCustomer: () => void
+  onBack: () => void
 }
 
-export function DebtPaymentPanel({
-  customerSearch, onCustomerSearchChange,
-  customerResults, selectedCustomer, onSelectCustomer,
-  newCustomerName, onNewCustomerNameChange,
-  newCustomerPhone, onNewCustomerPhoneChange,
-  newCustomerId, onNewCustomerIdChange,
-  showNewCustomer, onShowNewCustomer,
-  onCreateCustomer, isCreatingCustomer, onClearCustomer,
-}: Props) {
+export function DebtPaymentPanel({ onBack }: Props) {
   const { card, text, textSecondary, border, brand, bg } = useTheme()
+  const {
+    customerSearch, setCustomerSearch,
+    customerResults, selectedCustomer, setSelectedCustomer,
+    newCustomerName, setNewCustomerName,
+    newCustomerPhone, setNewCustomerPhone,
+    newCustomerId, setNewCustomerId,
+    showNewCustomer, setShowNewCustomer,
+    isCreatingCustomer, handleCreateCustomer,
+    handleClearCustomer,
+  } = useDebtCustomerSearch()
 
   return (
     <View style={s.container}>
-      <TouchableOpacity style={s.backBtn} onPress={() => {}}>
+      <TouchableOpacity style={s.backBtn} onPress={onBack}>
         <Text style={s.backBtnText}>← Back</Text>
       </TouchableOpacity>
 
@@ -45,54 +31,25 @@ export function DebtPaymentPanel({
 
       {selectedCustomer ? (
         <View style={[s.selectedCust, { backgroundColor: card, borderColor: brand }]}>
-    // @ts-expect-error
           <User size={16} color={brand} />
           <View style={{ flex: 1 }}>
             <Text style={[s.custName, { color: text }]}>{selectedCustomer.name}</Text>
-            {selectedCustomer.phone && (
-              <Text style={[s.custMeta, { color: textSecondary }]}>{selectedCustomer.phone}</Text>
-            )}
-            {selectedCustomer.idNumber && (
-              <Text style={[s.custMeta, { color: textSecondary }]}>ID: {selectedCustomer.idNumber}</Text>
-            )}
+            {selectedCustomer.phone && <Text style={[s.custMeta, { color: textSecondary }]}>{selectedCustomer.phone}</Text>}
+            {selectedCustomer.idNumber && <Text style={[s.custMeta, { color: textSecondary }]}>ID: {selectedCustomer.idNumber}</Text>}
           </View>
-    // @ts-expect-error
-          <TouchableOpacity onPress={onClearCustomer}><X size={16} color={textSecondary} /></TouchableOpacity>
+          <TouchableOpacity onPress={handleClearCustomer}><X size={16} color={textSecondary} /></TouchableOpacity>
         </View>
       ) : showNewCustomer ? (
         <View style={[s.newCustForm, { backgroundColor: card, borderColor: border }]}>
           <Text style={[s.formTitle, { color: text }]}>New Customer</Text>
-          <TextInput
-            style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]}
-            placeholder="Full Name *"
-            placeholderTextColor={textSecondary}
-            value={newCustomerName}
-            onChangeText={onNewCustomerNameChange}
-          />
-          <TextInput
-            style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]}
-            placeholder="Phone Number *"
-            placeholderTextColor={textSecondary}
-            keyboardType="phone-pad"
-            value={newCustomerPhone}
-            onChangeText={onNewCustomerPhoneChange}
-          />
-          <TextInput
-            style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]}
-            placeholder="ID Number (optional)"
-            placeholderTextColor={textSecondary}
-            value={newCustomerId}
-            onChangeText={onNewCustomerIdChange}
-          />
+          <TextInput style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]} placeholder="Full Name *" placeholderTextColor={textSecondary} value={newCustomerName} onChangeText={setNewCustomerName} />
+          <TextInput style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]} placeholder="Phone Number *" placeholderTextColor={textSecondary} keyboardType="phone-pad" value={newCustomerPhone} onChangeText={setNewCustomerPhone} />
+          <TextInput style={[s.tinput, { backgroundColor: bg, borderColor: border, color: text }]} placeholder="ID Number (optional)" placeholderTextColor={textSecondary} value={newCustomerId} onChangeText={setNewCustomerId} />
           <View style={s.formRow}>
-            <TouchableOpacity style={[s.cancelBtn, { borderColor: border }]} onPress={() => onShowNewCustomer(false)}>
+            <TouchableOpacity style={[s.cancelBtn, { borderColor: border }]} onPress={() => setShowNewCustomer(false)}>
               <Text style={[s.cancelBtnText, { color: text }]}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.saveBtn, { backgroundColor: brand }]}
-              onPress={onCreateCustomer}
-              disabled={isCreatingCustomer}
-            >
+            <TouchableOpacity style={[s.saveBtn, { backgroundColor: brand }]} onPress={handleCreateCustomer} disabled={isCreatingCustomer}>
               <Text style={s.saveBtnText}>{isCreatingCustomer ? 'Creating...' : 'Create & Use'}</Text>
             </TouchableOpacity>
           </View>
@@ -100,38 +57,22 @@ export function DebtPaymentPanel({
       ) : (
         <>
           <View style={[s.searchBox, { backgroundColor: card, borderColor: border }]}>
-    // @ts-expect-error
             <Search size={16} color={textSecondary} />
-            <TextInput
-              style={[s.searchInput, { color: text }]}
-              placeholder="Search customer by name, phone, or ID..."
-              placeholderTextColor={textSecondary}
-              value={customerSearch}
-              onChangeText={onCustomerSearchChange}
-            />
+            <TextInput style={[s.searchInput, { color: text }]} placeholder="Search customer by name, phone, or ID..." placeholderTextColor={textSecondary} value={customerSearch} onChangeText={setCustomerSearch} />
           </View>
 
           {customerResults.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={[s.custRow, { backgroundColor: card, borderColor: border }]}
-              onPress={() => onSelectCustomer(c)}
-            >
-    // @ts-expect-error
+            <TouchableOpacity key={c.id} style={[s.custRow, { backgroundColor: card, borderColor: border }]} onPress={() => setSelectedCustomer(c)}>
               <User size={14} color={textSecondary} />
               <View style={{ flex: 1 }}>
                 <Text style={[s.custName, { color: text }]}>{c.name}</Text>
-                <Text style={[s.custMeta, { color: textSecondary }]}>
-                  {c.phone || 'No phone'} {c.idNumber ? `• ${c.idNumber}` : ''}
-                </Text>
+                <Text style={[s.custMeta, { color: textSecondary }]}>{c.phone || 'No phone'} {c.idNumber ? `• ${c.idNumber}` : ''}</Text>
               </View>
-    // @ts-expect-error
               <Plus size={16} color={brand} />
             </TouchableOpacity>
           ))}
 
-          <TouchableOpacity style={[s.addCustBtn, { borderColor: brand }]} onPress={() => onShowNewCustomer(true)}>
-    // @ts-expect-error
+          <TouchableOpacity style={[s.addCustBtn, { borderColor: brand }]} onPress={() => setShowNewCustomer(true)}>
             <Plus size={14} color={brand} />
             <Text style={[s.addCustBtnText, { color: brand }]}>Add New Customer</Text>
           </TouchableOpacity>

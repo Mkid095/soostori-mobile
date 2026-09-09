@@ -13,10 +13,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { SessionStorage } from '@soostori/auth'
 
+// SDK storage adapter — get/set/delete are the contract methods
 export class AsyncStorageSessionStorage implements SessionStorage {
-  // AsyncStorage returns string | null. setItem/deleteItem return Promise<void>.
-  // The SessionStorage contract permits either sync OR Promise returns.
-
   async get(key: string): Promise<string | null> {
     return AsyncStorage.getItem(key)
   }

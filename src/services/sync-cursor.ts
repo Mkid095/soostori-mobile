@@ -23,7 +23,10 @@ export async function pullCloudChanges(): Promise<Array<{
   operation: string
   payload: unknown
 }>> {
-  const events = await cloudDownloadEvents()
+  const { getCurrentShopId } = await import('./session-helper')
+  const shopId = await getCurrentShopId()
+  if (!shopId) return []
+  const events = await cloudDownloadEvents(shopId)
   const cursor = await getSyncCursor()
   const sorted = [...events].sort((a: SyncEvent, b: SyncEvent) =>
     String(a.syncedAt || '').localeCompare(String(b.syncedAt || ''))

@@ -6,6 +6,7 @@ import type { Customer, Sale } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
 import { getCurrentRole } from './session-helper'
 
 export async function searchCustomers(query: string): Promise<Customer[]> {
@@ -39,6 +40,7 @@ export async function createCustomer(data: {
   phone?: string
   idNumber?: string
 }): Promise<Customer> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const id = generateId()
@@ -56,6 +58,7 @@ export async function updateCustomer(
   id: string,
   data: { name?: string; phone?: string; idNumber?: string }
 ): Promise<Customer | null> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const now = new Date().toISOString()
@@ -74,6 +77,7 @@ export async function updateCustomer(
 }
 
 export async function deactivateCustomer(id: string): Promise<void> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.CUSTOMERS_MANAGE)
   const db = await getDb()
   const now = new Date().toISOString()

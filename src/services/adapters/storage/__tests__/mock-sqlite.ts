@@ -7,6 +7,7 @@ export interface SQLiteDatabaseMock {
   runAsync: (sql: string, ...params: unknown[]) => Promise<{ rowsAffected: number }>
   getFirstAsync: <Row>(sql: string, ...params: unknown[]) => Promise<Row | null>
   getAllAsync: <Row>(sql: string, ...params: unknown[]) => Promise<Row[]>
+  withTransactionAsync: <T>(task: () => Promise<T>) => Promise<T>
 }
 
 export interface Row { [column: string]: unknown }
@@ -64,6 +65,10 @@ export function createMockDb(): SQLiteDatabaseMock {
 
   return {
     async execAsync() { /* no-op transaction markers */ },
+    async withTransactionAsync<T>(task: () => Promise<T>): Promise<T> {
+      // In-memory mock: no real transaction isolation needed for unit tests
+      return task()
+    },
     async runAsync(sql: string, ...params: unknown[]): Promise<{ rowsAffected: number }> {
       const upper = sql.trim().toUpperCase()
       const table = tableFromSql(sql)

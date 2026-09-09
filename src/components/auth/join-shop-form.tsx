@@ -10,28 +10,23 @@ interface Props {
   onLoadingChange: (loading: boolean) => void
 }
 
+type JoinStep = 'code' | 'email' | 'verify'
+
 export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
   const theme = useTheme()
   const [invitationCode, setInvitationCode] = useState('')
   const [email, setEmail] = useState('')
   const [magicCode, setMagicCode] = useState('')
-  const [step, setStep] = useState<'code' | 'email' | 'verify'>('code')
+  const [step, setStep] = useState<JoinStep>('code')
   const [sentEmail, setSentEmail] = useState('')
 
   async function handleRequestInvitation() {
-    if (!invitationCode.trim()) {
-      Alert.alert('Missing Code', 'Please enter the shop invitation code.')
-      return
-    }
-    // Store code for later use; next step requests email
+    if (!invitationCode.trim()) { Alert.alert('Missing Code', 'Please enter the shop invitation code.'); return }
     setStep('email')
   }
 
   async function handleSendCode() {
-    if (!email.trim() || !email.includes('@')) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.')
-      return
-    }
+    if (!email.trim() || !email.includes('@')) { Alert.alert('Invalid Email', 'Please enter a valid email address.'); return }
     onLoadingChange(true)
     try {
       await cloudSendMagicCode(email.trim())
@@ -40,28 +35,20 @@ export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
       Alert.alert('Check Your Email', `We sent a magic code to ${email.trim()}`)
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send code')
-    } finally {
-      onLoadingChange(false)
-    }
+    } finally { onLoadingChange(false) }
   }
 
   async function handleVerifyCode() {
-    if (!magicCode.trim() || magicCode.length < 6) {
-      Alert.alert('Missing Code', 'Please enter the 6-digit magic code.')
-      return
-    }
+    if (!magicCode.trim() || magicCode.length < 6) { Alert.alert('Missing Code', 'Please enter the 6-digit magic code.'); return }
     onLoadingChange(true)
     try {
-      // Verify the magic code and join the shop
-      const response = await cloudVerifyMagicCode(email.trim(), magicCode.trim())
+      await cloudVerifyMagicCode(email.trim(), magicCode.trim())
       onSuccess()
     } catch (err) {
       Alert.alert('Join Failed', err instanceof Error ? err.message : 'Invalid code')
       setStep('email')
       setMagicCode('')
-    } finally {
-      onLoadingChange(false)
-    }
+    } finally { onLoadingChange(false) }
   }
 
   return (
@@ -70,11 +57,7 @@ export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
         {step === 'code' ? 'Join Shop' : step === 'email' ? 'Enter Email' : 'Verify Code'}
       </Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        {step === 'code'
-          ? 'Enter the invitation code from the shop owner'
-          : step === 'email'
-            ? `Code sent to ${sentEmail}`
-            : 'Enter the magic code'}
+        {step === 'code' ? 'Enter the invitation code from the shop owner' : step === 'email' ? `Code sent to ${sentEmail}` : 'Enter the magic code'}
       </Text>
 
       {step === 'code' && (
@@ -82,12 +65,9 @@ export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
           <Text style={[styles.label, { color: theme.text }]}>Invitation Code</Text>
           <TextInput
             style={[styles.codeInput, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            value={invitationCode}
-            onChangeText={setInvitationCode}
-            placeholder="XXXX-XXXX"
-            placeholderTextColor={theme.muted}
-            autoCapitalize="characters"
-            maxLength={9}
+            value={invitationCode} onChangeText={setInvitationCode}
+            placeholder="XXXX-XXXX" placeholderTextColor={theme.muted}
+            autoCapitalize="characters" maxLength={9}
           />
         </View>
       )}
@@ -97,13 +77,9 @@ export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
           <Text style={[styles.label, { color: theme.text }]}>Your Email</Text>
           <TextInput
             style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={theme.muted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
+            value={email} onChangeText={setEmail}
+            placeholder="you@example.com" placeholderTextColor={theme.muted}
+            keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
           />
         </View>
       )}
@@ -113,34 +89,20 @@ export function JoinShopForm({ onBack, onSuccess, onLoadingChange }: Props) {
           <Text style={[styles.label, { color: theme.text }]}>Magic Code</Text>
           <TextInput
             style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
-            value={magicCode}
-            onChangeText={setMagicCode}
-            placeholder="Enter 6-digit code"
-            placeholderTextColor={theme.muted}
-            keyboardType="number-pad"
-            maxLength={6}
-            autoFocus
+            value={magicCode} onChangeText={setMagicCode}
+            placeholder="Enter 6-digit code" placeholderTextColor={theme.muted}
+            keyboardType="number-pad" maxLength={6} autoFocus
           />
         </View>
       )}
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: theme.brand }]}
-        onPress={() => {
-          if (step === 'code') handleRequestInvitation()
-          else if (step === 'email') handleSendCode()
-          else handleVerifyCode()
-        }}
+        onPress={() => { if (step === 'code') handleRequestInvitation(); else if (step === 'email') handleSendCode(); else handleVerifyCode() }}
         activeOpacity={0.85}
-        disabled={
-          (step === 'code' && !invitationCode.trim()) ||
-          (step === 'email' && !email.trim()) ||
-          (step === 'verify' && magicCode.length < 6)
-        }
+        disabled={(step === 'code' && !invitationCode.trim()) || (step === 'email' && !email.trim()) || (step === 'verify' && magicCode.length < 6)}
       >
-        <Text style={styles.buttonText}>
-          {step === 'code' ? 'Continue' : step === 'email' ? 'Send Code' : 'Verify & Join'}
-        </Text>
+        <Text style={styles.buttonText}>{step === 'code' ? 'Continue' : step === 'email' ? 'Send Code' : 'Verify & Join'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.backButton} onPress={onBack}>

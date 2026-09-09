@@ -1,0 +1,43 @@
+// deb.* — Debt screen strings
+type Table = Record<string, string>
+
+export const deb: { en: Table; sw: Table } = {
+  en: {
+    'deb.title': 'Debt',
+    'deb.recordDebt': 'Record Debt',
+    'deb.customerName': 'Customer Name',
+    'deb.phone': 'Phone',
+    'deb.amount': 'Amount',
+    'deb.total': 'Total',
+    'deb.paid': 'Paid',
+    'deb.balance': 'Balance',
+    'deb.pending': 'Pending',
+    'deb.partial': 'Partial',
+    'deb.paidStatus': 'Paid',
+    'deb.save': 'Save Debt',
+    'deb.cancel': 'Cancel',
+    'deb.recordFullPayment': 'Record Full Payment',
+    'deb.noDebts': 'No outstanding debts',
+    'deb.unknown': 'Unknown',
+    'deb.required': 'Customer name and amount are required',
+  },
+  sw: {
+    'deb.title': 'Deni',
+    'deb.recordDebt': 'Rekodi Deni',
+    'deb.customerName': 'Jina la Mteja',
+    'deb.phone': 'Simu',
+    'deb.amount': 'Kiasi',
+    'deb.total': 'Jumla',
+    'deb.paid': 'Imelipwa',
+    'deb.balance': 'Baki',
+    'deb.pending': 'Inasubiri',
+    'deb.partial': 'Sehemu',
+    'deb.paidStatus': 'Imelipwa',
+    'deb.save': 'Hifadhi Deni',
+    'deb.cancel': 'Ghairi',
+    'deb.recordFullPayment': 'Rekodi Malipo Kamili',
+    'deb.noDebts': 'Hakuna deni lililobaki',
+    'deb.unknown': 'Haijulikani',
+    'deb.required': 'Jina la mteja na kiasi vinahitajika',
+  },
+}

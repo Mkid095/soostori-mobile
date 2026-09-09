@@ -5,6 +5,7 @@ import type { Expense, ExpenseCategory } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
 import { getCurrentRole } from './session-helper'
 
 export async function getAllExpenses(): Promise<Expense[]> {
@@ -66,6 +67,7 @@ export async function createExpense(data: {
   reference?: string
   date: string
 }): Promise<Expense> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   const id = generateId()
@@ -89,6 +91,7 @@ export async function updateExpense(
     date?: string
   }
 ): Promise<Expense | null> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   const fields: string[] = []
@@ -109,6 +112,7 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: string): Promise<void> {
+  await enforceSubscriptionOrThrow()
   await enforcePermission(await getCurrentRole(), PERMISSIONS.EXPENSES_MANAGE)
   const db = await getDb()
   await db.runAsync('DELETE FROM expenses WHERE id = ?', [id])

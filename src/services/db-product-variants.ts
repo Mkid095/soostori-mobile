@@ -7,17 +7,22 @@ import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
 import { mapVariantRow } from './db-product-variants-mapper'
 import { recordInventoryTransaction } from './db-inventory-transactions'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
+import { getCurrentRole } from './session-helper'
+import { enforceStockMutationGate } from './db-operational-gate'
 
 async function resolveVariantShopId(): Promise<string> {
   const stored = await AsyncStorage.getItem('@soostori:shopId')
-  return stored ?? 'default'
+  if (!stored) throw new Error('No shop context')
+  return stored
 }
 
 export async function getVariantsByProductId(productId: string): Promise<ProductVariant[]> {
   const db = await getDb()
   const rows = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 ORDER BY name ASC',
-    [productId]
+    [productId],
   )
   return rows.map(mapVariantRow)
 }
@@ -25,29 +30,39 @@ export async function getVariantsByProductId(productId: string): Promise<Product
 export async function getVariantById(id: string): Promise<ProductVariant | null> {
   const db = await getDb()
   const row = await db.getFirstAsync<Record<string, unknown>>(
-    'SELECT * FROM product_variants WHERE id = ?', [id]
+    'SELECT * FROM product_variants WHERE id = ?', [id],
   )
   return row ? mapVariantRow(row) : null
 }
 
 export async function createVariant(
-  data: Omit<ProductVariant, 'id' | 'createdAt' | 'updatedAt'>
+  data: Omit<ProductVariant, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<ProductVariant> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
   const db = await getDb()
   const id = generateId()
   const now = new Date().toISOString()
 
   await db.runAsync(
-    `INSERT INTO product_variants (id, product_id, name, sku, barcode, cost_price, selling_price, stock_quantity, is_active, created_at, updated_at)
+    `INSERT INTO product_variants
+       (id, product_id, name, sku, barcode, cost_price, selling_price, stock_quantity, is_active, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-    [id, data.productId, data.name, data.sku || null, data.barcode || null,
-     data.costPrice ?? null, data.sellingPrice ?? null, data.stockQuantity, now, now]
+    [
+      id, data.productId, data.name, data.sku || null, data.barcode || null,
+      data.costPrice ?? null, data.sellingPrice ?? null, data.stockQuantity, now, now,
+    ],
   )
   await queueSync('product_variants', 'create', id)
   return (await getVariantById(id))!
 }
 
-export async function updateVariant(id: string, data: Partial<ProductVariant>): Promise<ProductVariant> {
+export async function updateVariant(
+  id: string,
+  data: Partial<ProductVariant>,
+): Promise<ProductVariant> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
   const db = await getDb()
   const now = new Date().toISOString()
   const sets: string[] = ['updated_at = ?']
@@ -67,10 +82,12 @@ export async function updateVariant(id: string, data: Partial<ProductVariant>): 
 }
 
 export async function deleteVariant(id: string): Promise<void> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.PRODUCT_DELETE)
   const db = await getDb()
   await db.runAsync(
     'UPDATE product_variants SET is_active = 0, updated_at = ? WHERE id = ?',
-    [new Date().toISOString(), id]
+    [new Date().toISOString(), id],
   )
   await queueSync('product_variants', 'delete', id)
 }
@@ -78,15 +95,20 @@ export async function deleteVariant(id: string): Promise<void> {
 export async function adjustVariantStock(
   variantId: string,
   quantity: number,
-  reason: string
+  reason: string,
 ): Promise<void> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_ADJUST)
+  enforceStockMutationGate()
+
   const db = await getDb()
   const variant = await getVariantById(variantId)
-  if (!variant) return
+  if (!variant) throw new Error(`Variant ${variantId} not found`)
 
   const shopId = await resolveVariantShopId()
+
   // Canonical event: inventory_transactions is the source of truth.
-  // recordInventoryTransaction also updates products.current_stock cache as a side effect.
+  // The variant is tracked via variant_id so it is unambiguously tied to this variant.
   await recordInventoryTransaction(
     shopId,
     variant.productId,
@@ -96,6 +118,7 @@ export async function adjustVariantStock(
     undefined,
     variant.name,
     variantId,
+    undefined,
     reason,
   )
 
@@ -104,7 +127,7 @@ export async function adjustVariantStock(
   const now = new Date().toISOString()
   await db.runAsync(
     'UPDATE product_variants SET stock_quantity = ?, updated_at = ? WHERE id = ?',
-    [newBalance, now, variantId]
+    [newBalance, now, variantId],
   )
   await queueSync('product_variants', 'update', variantId)
 }
@@ -113,7 +136,7 @@ export async function getVariantsByProductIdWithStock(productId: string): Promis
   const db = await getDb()
   const rows = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 AND stock_quantity > 0 ORDER BY name ASC',
-    [productId]
+    [productId],
   )
   return rows.map(mapVariantRow)
 }

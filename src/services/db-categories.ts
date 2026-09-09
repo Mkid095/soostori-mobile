@@ -1,9 +1,20 @@
 // Category CRUD operations — business logic in services, NOT components
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDb } from '../lib/db'
 import type { Category } from '../lib/types'
 import { generateId } from '../lib/formatters'
 import { queueSync } from './sync-queue-helper'
+import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
+import { logAudit } from './db-audit'
+import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
+import { getCurrentRole } from './session-helper'
+
+async function resolveShopId(): Promise<string> {
+  const stored = await AsyncStorage.getItem('@soostori:shopId')
+  if (!stored) return 'default'
+  return stored
+}
 
 export async function getAllCategories(): Promise<Category[]> {
   const db = await getDb()
@@ -34,6 +45,70 @@ export async function createCategory(data: Omit<Category, 'id' | 'createdAt' | '
     createdAt: now,
     updatedAt: now,
   }
+}
+
+export async function updateCategory(
+  id: string,
+  data: { name?: string; color?: string },
+): Promise<void> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
+  const shopId = await resolveShopId()
+  const db = await getDb()
+  const now = new Date().toISOString()
+  const sets: string[] = ['updated_at = ?']
+  const values: (string | number | null)[] = [now]
+
+  if (data.name !== undefined) {
+    sets.push('name = ?')
+    values.push(data.name)
+  }
+  if (data.color !== undefined) {
+    sets.push('color = ?')
+    values.push(data.color)
+  }
+
+  if (sets.length === 1) return // nothing to update
+
+  values.push(id)
+  await db.runAsync(`UPDATE categories SET ${sets.join(', ')} WHERE id = ?`, values)
+
+  const { logAudit } = await import('./db-audit')
+  await logAudit(shopId, 'CATEGORY_UPDATED', 'category', id, undefined, undefined,
+    undefined, JSON.stringify(data))
+
+  await queueSync('categories', 'update', id)
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await enforceSubscriptionOrThrow()
+  await enforcePermission(await getCurrentRole(), PERMISSIONS.INVENTORY_EDIT)
+  const shopId = await resolveShopId()
+  const db = await getDb()
+
+  // Check if any active products reference this category
+  const productRows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT id FROM products WHERE category_id = ? AND is_active = 1 LIMIT 1',
+    [id],
+  )
+
+  if (productRows.length > 0) {
+    // Products exist — clear the category reference on them before soft-deleting the category
+    await db.runAsync(
+      'UPDATE products SET category_id = NULL, category_name = NULL, category_color = NULL, updated_at = ? WHERE category_id = ?',
+      [new Date().toISOString(), id],
+    )
+  }
+
+  await db.runAsync(
+    'UPDATE categories SET is_active = 0, updated_at = ? WHERE id = ?',
+    [new Date().toISOString(), id],
+  )
+
+  const { logAudit } = await import('./db-audit')
+  await logAudit(shopId, 'CATEGORY_DELETED', 'category', id)
+
+  await queueSync('categories', 'delete', id)
 }
 
 function mapRow(row: Record<string, unknown>): Category {

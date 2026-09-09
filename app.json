@@ -23,8 +23,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#f97316",
         "foregroundImage": "./assets/android-icon-foreground.png"
-      },
-      "newArchEnabled": false
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,7 +31,15 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "webClientId": "YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com",
+          "iosClientId": "YOUR_GOOGLE_IOS_CLIENT_ID.apps.googleusercontent.com",
+          "androidClientId": "YOUR_GOOGLE_ANDROID_CLIENT_ID.apps.googleusercontent.com"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

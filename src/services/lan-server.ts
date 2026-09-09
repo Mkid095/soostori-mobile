@@ -1,4 +1,3 @@
-// @ts-nocheck
 // lan-server.ts — WebSocket + HTTP server for desktop host (port 18792)
 // Mobile connects as client via lan-client.ts
 // Desktop-only: this file is NOT imported by mobile builds
@@ -6,6 +5,44 @@
 import type { SyncEvent } from '../lib/sync-protocol'
 
 const PORT = 18792
+
+// ---------------------------------------------------------------------------
+// Message types exchanged between LAN client and server
+// ---------------------------------------------------------------------------
+
+interface SyncRequestMessage {
+  type: 'SYNC_REQUEST'
+  lastSequenceNumber: number
+}
+
+interface SyncAckMessage {
+  type: 'SYNC_ACK'
+  sequenceNumber: number
+}
+
+interface SalePendingMessage {
+  type: 'SALE_PENDING'
+  saleId: string
+  items: Array<{
+    productId: string
+    variantName?: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+  }>
+  totalAmount: number
+  paymentMethod: string
+  employeeId: string
+  deviceId: string
+  timestamp: string
+}
+
+type InboundMessage = SyncRequestMessage | SalePendingMessage | SyncEvent
+type OutboundMessage = SyncAckMessage | SyncEvent
+
+// ---------------------------------------------------------------------------
+// Server option types
+// ---------------------------------------------------------------------------
 
 type EventHandler = (event: SyncEvent) => void | Promise<void>
 
@@ -15,12 +52,24 @@ interface LanServerOptions {
   onEvent: EventHandler
 }
 
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
+
+type PendingPairingEntry = {
+  deviceId: string
+  deviceName: string
+  deviceType: string
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type WsServer = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type HttpServer = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type WebSocket = any
+type WsServer = import('ws').WebSocketServer<import('ws').WebSocket>
+type HttpServer = import('http').Server
+type WsSocket = import('ws').WebSocket
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
 
 class LanServerImpl {
   private shopId: string
@@ -28,7 +77,8 @@ class LanServerImpl {
   private onEvent: EventHandler
   private wss: WsServer | null = null
   private httpServer: HttpServer | null = null
-  private clients: Set<WebSocket> = new Set()
+  private clients: Set<WsSocket> = new Set()
+  private pendingPairings: Map<string, PendingPairingEntry> = new Map()
 
   constructor(options: LanServerOptions) {
     this.shopId = options.shopId
@@ -38,17 +88,19 @@ class LanServerImpl {
 
   async start(): Promise<number> {
     // Dynamic imports — Node.js only (desktop build)
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const { WebSocketServer } = await import('ws')
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const http = await import('http')
 
-    this.httpServer = http.createServer((req: { method?: string; url?: string }, res: { setHeader?: (k: string, v: string) => void; writeHead?: (c: number, h?: Record<string, string>) => void; end?: (b?: string) => void }) => {
+    this.httpServer = http.createServer((req, res) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
-      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
 
       if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -58,18 +110,27 @@ class LanServerImpl {
 
       if (req.method === 'POST' && req.url === '/api/pair') {
         let body = ''
-        req.on('data', (chunk: string) => { body += chunk })
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString('utf-8')
+        })
         req.on('end', async () => {
           try {
-            const { deviceId, deviceName, deviceType } = JSON.parse(body)
-            this.pendingPairings.set(deviceId, { deviceId, deviceName, deviceType })
+            const parsed = JSON.parse(body) as PendingPairingEntry
+            this.pendingPairings.set(parsed.deviceId, parsed)
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ status: 'pending', message: 'Pairing request received' }))
             await this.onEvent({
-              id: deviceId, shopId: this.shopId, deviceId,
+              id: parsed.deviceId,
+              shopId: this.shopId,
+              deviceId: parsed.deviceId,
               sequenceNumber: 0,
               eventType: 'DEVICE_PAIRED',
-              payload: JSON.stringify({ type: 'DEVICE_PAIRED', deviceId, deviceName, deviceType }),
+              payload: JSON.stringify({
+                type: 'DEVICE_PAIRED',
+                deviceId: parsed.deviceId,
+                deviceName: parsed.deviceName,
+                deviceType: parsed.deviceType,
+              }),
               timestamp: new Date().toISOString(),
             })
           } catch {
@@ -84,33 +145,38 @@ class LanServerImpl {
       res.end(JSON.stringify({ error: 'Not found' }))
     })
 
-    return new Promise((resolve: (port: number) => void) => {
+    return new Promise((resolve) => {
       this.httpServer!.listen(PORT, () => resolve(PORT))
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       this.wss = new WebSocketServer({ server: this.httpServer!, path: '/ws' })
-      this.wss.on('connection', (ws: WebSocket) => {
+      this.wss.on('connection', (ws: WsSocket) => {
         this.clients.add(ws)
-        ws.on('message', (data: unknown) => { this.handleMessage(ws, data) })
-        ws.on('close', () => { this.clients.delete(ws) })
-        ws.on('error', () => { this.clients.delete(ws) })
+        ws.on('message', (data: unknown) => {
+          this.handleMessage(ws, data)
+        })
+        ws.on('close', () => {
+          this.clients.delete(ws)
+        })
+        ws.on('error', () => {
+          this.clients.delete(ws)
+        })
       })
     })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pendingPairings: Map<string, { deviceId: string; deviceName: string; deviceType: string }> = new Map()
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async handleMessage(ws: any, data: unknown): Promise<void> {
+  private async handleMessage(ws: WsSocket, data: unknown): Promise<void> {
     try {
-      const msg = JSON.parse(data as string)
+      if (!this.isObject(data)) return
+      const msg = data as Record<string, unknown>
 
       if (msg.type === 'SYNC_REQUEST') {
-        ws.send(JSON.stringify({ type: 'SYNC_ACK', sequenceNumber: msg.lastSequenceNumber }))
+        const syncMsg = msg as unknown as SyncRequestMessage
+        const ack: OutboundMessage = { type: 'SYNC_ACK', sequenceNumber: syncMsg.lastSequenceNumber ?? 0 }
+        ws.send(JSON.stringify(ack))
         return
       }
 
-      const event: SyncEvent = msg as SyncEvent
+      // All other messages (including SALE_PENDING) are SyncEvents
+      const event = msg as unknown as SyncEvent
       await this.onEvent(event)
       this.broadcast(event, ws)
     } catch {
@@ -118,11 +184,19 @@ class LanServerImpl {
     }
   }
 
-  broadcast(event: SyncEvent, exclude?: WebSocket): void {
+  private isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  broadcast(event: SyncEvent, exclude?: WsSocket): void {
     const msg = JSON.stringify(event)
     for (const client of this.clients) {
       if (client !== exclude) {
-        try { client.send(msg) } catch { /* ignore dead clients */ }
+        try {
+          client.send(msg)
+        } catch {
+          // ignore dead clients
+        }
       }
     }
   }

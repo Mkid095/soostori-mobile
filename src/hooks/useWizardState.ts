@@ -22,12 +22,30 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
     setCategories(await getAllCategories())
   }, [])
 
-  const open = useCallback(() => {
+  const open = useCallback(async () => {
     setForm({ ...makeInit(), ...initialForm } as ProductForm)
     setStep(0)
     setErrors({})
     setVariants([])
     loadCategories()
+
+    // When editing (initialForm carries the product id via wizardTypes inference),
+    // load persisted variants so their DB ids are available for stock adjustment.
+    if (initialForm && (initialForm as Record<string, unknown>).id) {
+      const { getVariantsByProductId } = await import('../services/db-product-variants')
+      const productId = (initialForm as Record<string, unknown>).id as string
+      const dbVariants = await getVariantsByProductId(productId)
+      setVariants(dbVariants.map((dv) => ({
+        id: dv.id,
+        name: dv.name,
+        sku: dv.sku || '',
+        barcode: dv.barcode || '',
+        sellingPrice: dv.sellingPrice != null ? String(dv.sellingPrice) : '',
+        costPrice: dv.costPrice != null ? String(dv.costPrice) : '',
+        stockQuantity: String(dv.stockQuantity),
+        persistedStock: dv.stockQuantity,
+      })))
+    }
   }, [initialForm, loadCategories])
 
   const close = useCallback(() => {
@@ -97,6 +115,10 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
     setVariants((v) => v.map((vr, idx) => idx === i ? { ...vr, [field]: value } : vr))
   }, [])
 
+  const updateVariantStock = useCallback((i: number, newStock: number) => {
+    setVariants((v) => v.map((vr, idx) => idx === i ? { ...vr, stockQuantity: String(newStock), persistedStock: newStock } : vr))
+  }, [])
+
   const handleSubmit = useCallback(async (variants: VariantRow[]) => {
     if (!form.name?.trim()) return
     setSaving(true)
@@ -116,6 +138,6 @@ export function useWizardState({ initialForm, onSave, isEdit, onSaved, onClose }
     open, close, set, next, back,
     addGroupPrice, removeGroupPrice, updateGroupPrice,
     selectCategory, generateBarcode, handleSubmit,
-    addVariant, removeVariant, updateVariant,
+    addVariant, removeVariant, updateVariant, updateVariantStock,
   }
 }

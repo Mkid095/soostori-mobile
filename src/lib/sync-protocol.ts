@@ -61,7 +61,8 @@ export interface SyncEvent {
 }
 
 export interface InventoryTransaction {
-  id: string; shopId: string; productId: string; variantName?: string
+  id: string; shopId: string; productId: string; variantId?: string
+  variantName?: string
   type: InventoryTransactionType; quantity: number; balanceAfter: number
   createdBy?: string; deviceId?: string; referenceId?: string
   reason?: string; timestamp: string
