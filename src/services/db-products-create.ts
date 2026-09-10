@@ -7,7 +7,9 @@ import { queueSync } from './sync-queue-helper'
 import { getProductById } from './db-products-queries'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
-import { getCurrentRole } from './session-helper'
+import { getCurrentRole, getCurrentShopId } from './session-helper'
+import { defaultSyncEngine } from '@soostori/contracts'
+import { fromLocalProduct } from '../lib/contracts-mapper'
 
 export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
   await enforceSubscriptionOrThrow()
@@ -27,5 +29,50 @@ export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'up
     data.distributorName || null, data.distributorPhone || null,
     data.unitsPerPackage || null, data.boxBuyingPrice || null, groupPrices, now, now])
   await queueSync('products', 'create', id)
+  // Cycle 04 Sub-F — emit SyncEvent on the canonical engine after the local
+  // commit lands. Fire-and-forget: a sync-engine failure must not break the
+  // local INSERT path (real engine retries via `sync_queue`).
+  enqueueProductSyncEvent(id).catch(() => { /* swallow — local DB is source of truth */ })
   return (await getProductById(id))!
+}
+
+/**
+ * Sub-F — build and enqueue a SyncEvent<Product> on `defaultSyncEngine`.
+ * Reads the just-inserted row via the local mapper so the payload matches
+ * the @soostori/contracts `Product` shape exactly (see sync-contract.ts §6).
+ */
+async function enqueueProductSyncEvent(productId: string): Promise<void> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM products WHERE id = ?', [productId],
+  )
+  if (!row) return
+  const businessId = await getCurrentShopId()
+  if (!businessId) return // no tenant context — skip; queueSync already required it
+  const entity = fromLocalProduct(row)
+  await defaultSyncEngine.enqueue({
+    // brand-helper casts — Sub-D left @soostori/core at alpha.7; SyncEvent
+    // fields are SyncEventId/IdempotencyKey/BusinessId/DeviceId/EmployeeId.
+    // Sub-cycle F moves on per the brief: documented, not redesigned.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    id: generateId() as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    idempotencyKey: ((entity as { idempotencyKey?: string }).idempotencyKey ?? productId) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    businessId: String(entity.businessId) as any,
+    entityKind: 'product',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    entityId: String(entity.id) as any,
+    operation: 'create',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingDeviceId: String(entity.businessId) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingEmployeeId: 'system' as any,
+    clientSequence: Date.now(),
+    clientCreatedAt: entity.createdAt,
+    entityVersion: entity.version,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: entity as any,
+    state: 'pending',
+  })
 }

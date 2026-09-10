@@ -11,8 +11,10 @@ import { logAudit } from './db-audit'
 import { publishSdkEvent } from './sdk-bridge/sdk-event-bus'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
-import { getCurrentRole } from './session-helper'
+import { getCurrentRole, getCurrentShopId } from './session-helper'
 import { enforceStockMutationGate } from './db-operational-gate'
+import { defaultSyncEngine } from '@soostori/contracts'
+import { fromLocalSale } from '../lib/contracts-mapper'
 
 export class InsufficientStockError extends Error {
   constructor(public productName: string, public requested: number, public available: number) {
@@ -69,6 +71,39 @@ export async function createSale(
   queueSync('sales', 'create', id, shopId).catch(() => {})
   logAudit(shopId, 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod })).catch(() => {})
   publishSdkEvent({ name: 'sale.completed', entity: 'sale', entityId: id, payload: { saleId: id, total: totalAmount }, source: 'local' }).catch(() => {})
+  // Cycle 04 Sub-F — canonical SyncEvent on defaultSyncEngine. Fire-and-forget.
+  enqueueSaleSyncEvent(sale, shopId).catch(() => {})
 
   return mapSaleRow(sale)
+}
+
+/**
+ * Sub-F — enqueue a SyncEvent<Sale> using the contracts mapper so the
+ * payload matches the @soostori/contracts `Sale` shape.
+ */
+async function enqueueSaleSyncEvent(row: Record<string, unknown>, shopId: string): Promise<void> {
+  const entity = fromLocalSale(row)
+  await defaultSyncEngine.enqueue({
+    // brand-helper casts — alpha.7 brand surface (see db-products-create.ts)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    id: generateId() as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    idempotencyKey: ((entity as { idempotencyKey?: string }).idempotencyKey ?? String(row.id)) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    businessId: shopId as any,
+    entityKind: 'sale',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    entityId: String(entity.id) as any,
+    operation: 'create',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingDeviceId: shopId as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingEmployeeId: 'system' as any,
+    clientSequence: Date.now(),
+    clientCreatedAt: entity.createdAt,
+    entityVersion: entity.version,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: entity as any,
+    state: 'pending',
+  })
 }

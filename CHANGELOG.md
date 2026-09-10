@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Cycle 04 Sub-cycle F — Mobile `defaultSyncEngine.enqueue()` smoke wiring
+
+- **UPD: `src/services/db-products-create.ts`**: after the sqlite INSERT lands, the service now constructs and enqueues a canonical `SyncEvent<Product>` on `defaultSyncEngine` (from `@soostori/contracts`) via the Sub-D `fromLocalProduct` mapper. Fire-and-forget so a sync-engine hiccup never breaks the local INSERT path. The pre-existing `queueSync('products', 'create', id)` call is preserved.
+- **UPD: `src/services/db-sale-create.ts`**: same pattern — builds the `SyncEvent<Sale>` from the just-inserted row using `fromLocalSale`, enqueues on `defaultSyncEngine` after the transactional commit. `queueSync('sales', 'create', id, shopId)` preserved.
+- **UPD: `src/__mocks__/soostori-contracts.ts`**: jest CJS mock now exposes `defaultSyncEngine`, `NoOpSyncEngineClass` (with an inspectable queue + `lastMatching()` helper) so Sub-cycle F tests can assert `enqueue()` was called. The pre-existing `NoOpSyncEngine` const surface is unchanged.
+- **NEW: `src/services/__tests__/sync-engine-mobile.spec.ts` + `sync-engine-mobile.mocks.ts`**: 4 jest tests proving (1) `createProduct` enqueues a `SyncEvent<Product>` with all §6 fields populated, (2) `createSale` enqueues a `SyncEvent<Sale>` with the contracts-shaped payload, (3) `defaultSyncEngine` and `NoOpSyncEngineClass` share the same underlying queue, (4) every required SyncEvent field (id, idempotencyKey, businessId, entityKind, entityId, operation, originatingDeviceId, originatingEmployeeId, clientSequence, clientCreatedAt, entityVersion, payload, state) is populated.
+- **PRESERVED**: all 15 pre-existing tests (Sub-D's 6 cloud-auth-backend + 9 contracts-mapper). `npx jest` reports **19/19 pass**.
+- **NOTED (alpha.7 ↔ alpha.2 brand mismatch)**: `@soostori/core` is pinned at `^0.1.0-alpha.7` while `@soostori/contracts` is `alpha.2` (Sub-D); `SyncEvent` branded fields (`SyncEventId`, `IdempotencyKey`, `BusinessId`, `DeviceId`, `EmployeeId`) are cast via `as any` at the call sites per the brief's "document and move on" rule. The orchestrator's Cycle 05 should bump mobile's `@soostori/core` to alpha.9 to drop the casts.
+
 ### Cycle 04 Sub-cycle D — Mobile Local-Schema ↔ SDK Data Contract Alignment
 
 - **NEW: `src/lib/contracts-mapper.ts`**: read-side mapping layer from Mobile's `expo-sqlite` rows to `@soostori/contracts@0.1.0-alpha.1` canonical entities. 13 mappers — `fromLocalBusiness`, `fromLocalEmployee`, `fromLocalDevice`, `fromLocalInvitation`, `fromLocalProduct`, `fromLocalCategory`, `fromLocalStockMovement`, `fromLocalSale`, `fromLocalSaleLineItem`, `fromLocalCustomer`, `fromLocalDebt`, `fromLocalDebtPayment`, `fromLocalExpense`. Aliased local columns (`shop_id` → `businessId`, `is_active` → `status`, `amount_paid` → `balance`, `reference_id` → `idempotencyKey`, `mpesa` → `mobile_money`, etc.) per `reports/2025-cycle-04/D-mobile-schema-audit.md`. ≤ 150 lines, no helpers.ts.
