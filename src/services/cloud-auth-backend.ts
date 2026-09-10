@@ -1,4 +1,10 @@
 // cloud-auth-backend.ts — InstantDB API calls for authentication
+//
+// §17/§84: Auth does NOT provision a business. A user who authenticates with
+// Google / magic code but has no existing Soostori membership (no employee row
+// for their email) receives a typed PERSON_NOT_FOUND result. The UI then
+// surfaces the §29 contact phone (UNAUTHORIZED_LOGIN_CONTACT_PHONE) so the
+// user can reach a salesperson for enrollment. No shop is ever created here.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { db, id } from '../lib/instant-client'
 import type { CloudAuthResponse, SubscriptionEntitlement } from '../contracts/cloud'
@@ -6,40 +12,44 @@ import { cacheEntitlement } from './entitlement-cache'
 import { resolveOrCreateEmployee } from './cloud-auth-employee'
 import { resolveOrRegisterDevice } from './cloud-auth-device'
 
+export type CloudAuthResult =
+  | { ok: true; response: CloudAuthResponse }
+  | { ok: false; code: 'PERSON_NOT_FOUND' }
+
 export async function cloudSendMagicCode(email: string): Promise<void> {
   await db.auth.sendMagicCode({ email })
 }
 
-export async function cloudVerifyMagicCode(email: string, code: string): Promise<CloudAuthResponse> {
+export async function cloudVerifyMagicCode(email: string, code: string): Promise<CloudAuthResult> {
   const result = await db.auth.signInWithMagicCode({ email, code })
   if (!result.user) throw new Error('Authentication failed')
 
   const userId = result.user.id
   await AsyncStorage.setItem('@soostori:cloudToken', userId)
 
-  const shopsResult = await db.queryOnce({ shops: {} })
-  let shop = (shopsResult.data.shops as any[])?.[0] || null
+  const existing = await findExistingEmployee(email)
+  if (!existing) {
+    return { ok: false, code: 'PERSON_NOT_FOUND' }
+  }
 
+  const shop = await findShopById(existing.shopId)
   if (!shop) {
-    const shopId = id()
-    await db.transact(db.tx.shops[shopId].create({
-      id: shopId, name: 'My Shop', slug: `shop-${Date.now()}`,
-      taxRate: 0, plan: 'free', subscriptionExpiry: '', status: 'active',
-    }))
-    shop = { id: shopId, name: 'My Shop', slug: `shop-${Date.now()}`, status: 'active' }
+    return { ok: false, code: 'PERSON_NOT_FOUND' }
   }
 
   const shopId = shop.id
   await resolveOrRegisterDevice(shopId)
-  // Employee must set their own PIN via OperationalAuth — do NOT create with a default
-  const employee = await resolveOrCreateEmployee(shopId, email)
+  const employee = await resolveOrCreateEmployee(shopId, email, existing)
   const entitlement = await resolveSubscription(shopId)
 
   return {
-    user: { id: userId, email, type: employee.role },
-    shop: { id: shop.id, name: shop.name, slug: shop.slug, plan: shop.plan, status: shop.status },
-    entitlement,
-    serverTime: new Date().toISOString(),
+    ok: true,
+    response: {
+      user: { id: userId, email, type: employee.role },
+      shop: { id: shop.id, name: shop.name, slug: shop.slug, plan: shop.plan, status: shop.status },
+      entitlement,
+      serverTime: new Date().toISOString(),
+    },
   }
 }
 
@@ -70,7 +80,7 @@ export async function resolveSubscription(shopId: string): Promise<SubscriptionE
   return entitlement
 }
 
-export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAuthResponse> {
+export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAuthResult> {
   // Exchange Google ID token for a cloud session via InstantDB auth
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await (db.auth as any).signInWithGoogle({ idToken })
@@ -80,31 +90,53 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAu
   const email = result.user.email ?? ''
   await AsyncStorage.setItem('@soostori:cloudToken', userId)
 
-  const shopsResult = await db.queryOnce({ shops: {} })
-  let shop = (shopsResult.data.shops as any[])?.[0] || null
+  const existing = await findExistingEmployee(email)
+  if (!existing) {
+    return { ok: false, code: 'PERSON_NOT_FOUND' }
+  }
 
+  const shop = await findShopById(existing.shopId)
   if (!shop) {
-    const shopId = id()
-    await db.transact(db.tx.shops[shopId].create({
-      id: shopId, name: 'My Shop', slug: `shop-${Date.now()}`,
-      taxRate: 0, plan: 'free', subscriptionExpiry: '', status: 'active',
-    }))
-    shop = { id: shopId, name: 'My Shop', slug: `shop-${Date.now()}`, status: 'active' }
+    return { ok: false, code: 'PERSON_NOT_FOUND' }
   }
 
   const shopId = shop.id
   await resolveOrRegisterDevice(shopId)
-  const employee = await resolveOrCreateEmployee(shopId, email)
+  const employee = await resolveOrCreateEmployee(shopId, email, existing)
   const entitlement = await resolveSubscription(shopId)
 
   return {
-    user: { id: userId, email, type: employee.role },
-    shop: { id: shop.id, name: shop.name, slug: shop.slug, plan: shop.plan, status: shop.status },
-    entitlement,
-    serverTime: new Date().toISOString(),
+    ok: true,
+    response: {
+      user: { id: userId, email, type: employee.role },
+      shop: { id: shop.id, name: shop.name, slug: shop.slug, plan: shop.plan, status: shop.status },
+      entitlement,
+      serverTime: new Date().toISOString(),
+    },
   }
 }
 
 export async function cloudGetServerTime(): Promise<string> {
   return new Date().toISOString()
 }
+
+// ─── internal helpers ────────────────────────────────────────────────────────
+
+type EmployeeRow = { id: string; shopId: string; email?: string; role: string }
+type ShopRow = { id: string; name: string; slug?: string; plan?: string; status?: string }
+
+async function findExistingEmployee(email: string): Promise<EmployeeRow | null> {
+  const result = await db.queryOnce({ employees: {} })
+  const employees = (result.data.employees as EmployeeRow[]) || []
+  return employees.find((e) => e.email === email) ?? null
+}
+
+async function findShopById(shopId: string): Promise<ShopRow | null> {
+  const result = await db.queryOnce({ shops: {} })
+  const shops = (result.data.shops as ShopRow[]) || []
+  return shops.find((s) => s.id === shopId) ?? null
+}
+
+// `id` is imported above to keep parity with previous behaviour — re-export
+// for any external caller still importing it from this barrel.
+export { id }

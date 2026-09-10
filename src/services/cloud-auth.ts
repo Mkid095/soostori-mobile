@@ -9,6 +9,7 @@ export {
   resolveSubscription,
   cloudGetServerTime,
 } from './cloud-auth-backend'
+export type { CloudAuthResult } from './cloud-auth-backend'
 
 export async function cloudLogout(): Promise<void> {
   await AsyncStorage.multiRemove([
