@@ -10,6 +10,7 @@ import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
 import { getCurrentRole, getCurrentShopId } from './session-helper'
 import { defaultSyncEngine } from '@soostori/contracts'
 import { fromLocalProduct } from '../lib/contracts-mapper'
+import { triggerSync } from './mobile-sync-service'
 
 export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
   await enforceSubscriptionOrThrow()
@@ -32,7 +33,9 @@ export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'up
   // Cycle 04 Sub-F — emit SyncEvent on the canonical engine after the local
   // commit lands. Fire-and-forget: a sync-engine failure must not break the
   // local INSERT path (real engine retries via `sync_queue`).
-  enqueueProductSyncEvent(id).catch(() => { /* swallow — local DB is source of truth */ })
+  enqueueProductSyncEvent(id)
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
   return (await getProductById(id))!
 }
 

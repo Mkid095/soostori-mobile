@@ -15,6 +15,7 @@ import { getCurrentRole, getCurrentShopId } from './session-helper'
 import { enforceStockMutationGate } from './db-operational-gate'
 import { defaultSyncEngine } from '@soostori/contracts'
 import { fromLocalSale } from '../lib/contracts-mapper'
+import { triggerSync } from './mobile-sync-service'
 
 export class InsufficientStockError extends Error {
   constructor(public productName: string, public requested: number, public available: number) {
@@ -72,7 +73,9 @@ export async function createSale(
   logAudit(shopId, 'SALE_COMPLETED', 'sale', id, undefined, undefined, undefined, JSON.stringify({ totalAmount, paymentMethod })).catch(() => {})
   publishSdkEvent({ name: 'sale.completed', entity: 'sale', entityId: id, payload: { saleId: id, total: totalAmount }, source: 'local' }).catch(() => {})
   // Cycle 04 Sub-F — canonical SyncEvent on defaultSyncEngine. Fire-and-forget.
-  enqueueSaleSyncEvent(sale, shopId).catch(() => {})
+  enqueueSaleSyncEvent(sale, shopId)
+    .then(() => triggerSync())
+    .catch(() => {})
 
   return mapSaleRow(sale)
 }

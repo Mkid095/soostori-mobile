@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 05 — Real Synchronization (Mobile)
+
+**What changed:** `NoOpSyncEngine` replaced with real FIDScript-backed engine; Mobile can now push products/sales to cloud and pull cloud events into local SQLite.
+
+**Files created:**
+- `src/services/mobile-sync-engine.ts` — Real engine: `enqueue()` uploads to FIDScript, `pull()` queries cloud events, `apply()` upserts cloud product/sale into local SQLite, `pushOutbox()` flushes pending local events to cloud. Business isolation enforced (wrong `businessId` → `no_op`).
+- `src/services/mobile-sync-service.ts` — Sync service: `initMobileSync()` monkey-patches `defaultSyncEngine` to use real engine; `startSyncListeners()` activates AppState resume + NetInfo reconnect sync; `triggerSync()` called after `createProduct`/`createSale`.
+- `src/services/__tests__/sync-engine-mobile-phase05.spec.ts` — 4 tests: enqueue with all SyncEvent fields, FIDScript transact call, pull from cloud, business isolation (wrong shopId → no_op).
+
+**Files modified:**
+- `src/services/db-products-create.ts`: `triggerSync()` called after `enqueueProductSyncEvent()` succeeds.
+- `src/services/db-sale-create.ts`: `triggerSync()` called after `enqueueSaleSyncEvent()` succeeds.
+- `src/components/app/root-layout-content.tsx`: `initMobileSync()` + `startSyncListeners()` wired into app init; `stopSyncListeners()` cleanup on unmount.
+- `src/__mocks__/soostori-contracts.ts`: mock now exposes `pull()` + `apply()` + `injectPulledEvents()` for Phase 05 tests.
+- `src/services/__tests__/sync-engine-mobile.mocks.ts`: added `react-native` + `AppState` mock, `@react-native-community/netinfo` mock, `instant-client` mock with `db.tx.syncEvents` proxy + `transact`/`queryOnce` fakes; fixed `getDb` mock to be sync (was `async`).
+
+**Sync flow:**
+1. `createProduct`/`createSale` → local SQLite INSERT → `defaultSyncEngine.enqueue()` (monkey-patched to real engine) → FIDScript `transact()`
+2. `triggerSync()` → `pushOutbox()` (flush pending) + `pullAndApply()` (pull cloud events → apply to local SQLite)
+3. AppState 'active' → `triggerSync()`
+4. NetInfo reconnect → `pushOutbox()` + `triggerSync()`
+
+**Business isolation:** `apply()` checks `event.businessId !== shopId` → returns `no_op`.
+
+**`npx jest`:** 23/23 pass (19 pre-existing + 4 Phase 05).
+**`npx tsc --noEmit`:** zero new errors introduced by Phase 05 changes.
+
 ### Phase 04 — RBAC: Capability Registry (Mobile)
 
 **What changed:** Role-default checks (`role === 'owner'`) replaced with SDK `hasCapability`/`can` calls.

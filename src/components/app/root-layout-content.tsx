@@ -19,6 +19,7 @@ import { UpdateBanner } from '../shared/update-banner'
 import { getUpdateState } from '../../services/db-update-state'
 import { getQueryClient } from '../../lib/query-client'
 import { getDb } from '../../lib/db'
+import { initMobileSync, startSyncListeners, stopSyncListeners } from '../../services/mobile-sync-service'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -46,6 +47,13 @@ export function RootLayoutContent() {
 
   useCloudSync()
   useDeviceHeartbeat()
+
+  // Phase 05: init real FIDScript-backed sync engine and start resume/reconnect listeners
+  useEffect(() => {
+    initMobileSync().catch(console.warn)
+    startSyncListeners()
+    return () => stopSyncListeners()
+  }, [])
 
   useEffect(() => { if (!dbReady) return; return attachSdkBridges() }, [dbReady])
 

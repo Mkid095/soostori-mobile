@@ -27,6 +27,47 @@ export const sqliteStore = {
 }
 
 // Side-effect gates — installed via jest.mock below.
+jest.mock('@react-native-community/netinfo', () => ({
+  addEventListener: jest.fn(() => jest.fn()),
+}))
+jest.mock('react-native', () => ({
+  AppState: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}))
+jest.mock('../../lib/instant-client', () => {
+  const uploadedEvents: Array<Record<string, unknown>> = []
+  const mockDb = {
+    transact: jest.fn(async (ops: unknown[]) => {
+      // Capture whatever was transacted
+      for (const op of ops) {
+        if (Array.isArray(op) && op[0] && typeof op[0] === 'object') {
+          const createOp = op[0] as Record<string, unknown>
+          if (createOp['create']) {
+            uploadedEvents.push(createOp['create'] as Record<string, unknown>)
+          }
+        }
+      }
+      return { applied: ops.length }
+    }),
+    queryOnce: jest.fn(async () => ({ data: { syncEvents: [] } })),
+  }
+  // Build a proper tx chain: db.tx.syncEvents[id()].create(...)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(mockDb as any).tx = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    syncEvents: new Proxy({}, {
+      get: (_t: unknown, id: string) => ({
+        create: (data: Record<string, unknown>) => [id, { create: data }],
+      }),
+    }),
+  }
+  return {
+    db: mockDb,
+    id: () => `mock-id-${Date.now()}`,
+    lookup: jest.fn(),
+  }
+})
 jest.mock('../../services/sdk-bridge/subscription-gate', () => ({
   enforceSubscriptionOrThrow: jest.fn(async () => undefined),
   loadCachedSubscriptionState: jest.fn(async () => ({ state: 'NORMAL' as const, cached: null })),
@@ -57,7 +98,7 @@ jest.mock('../../services/sync-queue-helper', () => ({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 jest.mock('../../lib/db', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getDb: async () => ({
+  getDb: () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     runAsync: async (_sql: string, params?: any[]) => {
       const arr = Array.isArray(params) ? params : params != null ? [params] : []
