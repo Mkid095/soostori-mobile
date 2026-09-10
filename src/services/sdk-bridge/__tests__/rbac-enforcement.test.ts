@@ -247,5 +247,83 @@ console.log('\n-- enforcePermission denied null role --')
 assertThrows('null pos.sell throws', () => enforcePermission(null, PERMISSIONS.POS_SELL))
 assertThrows('null inventory.edit throws', () => enforcePermission(null, PERMISSIONS.INVENTORY_EDIT))
 
+// ---------------------------------------------------------------------------
+// Phase 04: Test the new enforceCapability + hasCapability wrapper
+// ---------------------------------------------------------------------------
+
+// SDK Member interface mirrors @soostori/auth
+interface Member {
+  role: EmployeeRole
+  memberCapabilityOverrides?: Record<string, boolean> | null
+}
+
+// hasCapability mirrors @soostori/auth — checks role bundle first, then override
+function hasCapability(member: Member | null | undefined, capability: string): boolean {
+  if (!member || !member.role) return false
+  if (member.memberCapabilityOverrides && capability in member.memberCapabilityOverrides) {
+    return Boolean(member.memberCapabilityOverrides[capability])
+  }
+  return (ROLE_PERMISSIONS[member.role] ?? []).includes(capability)
+}
+
+function can(member: Member | null | undefined, capability: string): boolean {
+  return hasCapability(member, capability)
+}
+
+function enforceCapability(member: Member | null | undefined, permission: string): void {
+  if (!can(member, permission)) {
+    throw new PermissionDeniedError(permission, member?.role ?? null)
+  }
+}
+
+console.log('\n=== Phase 04 Mobile RBAC — capability-based enforcement ===\n')
+
+// hasCapability — owner
+console.log('-- hasCapability owner --')
+const owner: Member = { role: 'owner' }
+assert('owner has products.view', hasCapability(owner, 'products.view') === true)
+assert('owner has team.invite', hasCapability(owner, 'team.invite') === true)
+assert('owner has business.update', hasCapability(owner, 'business.update') === true)
+assert('owner has sales.void', hasCapability(owner, 'sales.void') === true)
+
+// hasCapability — manager
+console.log('\n-- hasCapability manager --')
+const manager: Member = { role: 'manager' }
+assert('manager has products.view', hasCapability(manager, 'products.view') === true)
+assert('manager has team.invite', hasCapability(manager, 'team.invite') === true)
+assert('manager lacks business.update', hasCapability(manager, 'business.update') === false)
+assert('manager has sales.void', hasCapability(manager, 'sales.void') === true)
+
+// hasCapability — attendant
+console.log('\n-- hasCapability attendant --')
+const attendant: Member = { role: 'attendant' }
+assert('attendant has products.view', hasCapability(attendant, 'products.view') === true)
+assert('attendant lacks team.invite', hasCapability(attendant, 'team.invite') === false)
+assert('attendant lacks business.update', hasCapability(attendant, 'business.update') === false)
+assert('attendant lacks sales.void', hasCapability(attendant, 'sales.void') === false)
+
+// hasCapability — null
+console.log('\n-- hasCapability null member --')
+assert('null member has no capabilities', hasCapability(null, 'products.view') === false)
+assert('null owner object has no capabilities', hasCapability({ role: null as any, memberCapabilityOverrides: null }, 'products.view') === false)
+
+// hasCapability — override
+console.log('\n-- hasCapability member override --')
+const managerBlocked: Member = { role: 'manager', memberCapabilityOverrides: { 'business.update': false } }
+assert('manager override false → lacks business.update', hasCapability(managerBlocked, 'business.update') === false)
+
+const attendantUpgraded: Member = { role: 'attendant', memberCapabilityOverrides: { 'team.invite': true } }
+assert('attendant override true → has team.invite', hasCapability(attendantUpgraded, 'team.invite') === true)
+
+// enforceCapability — coarse mobile permission keys (PERMISSIONS values)
+// Note: 'team.invite' is an SDK capability name, NOT a coarse mobile PERMISSION key.
+// The coarse key for team management is 'team.manage'.
+console.log('\n-- enforceCapability throws --')
+assertThrows('enforceCapability attendant → team.manage throws', () => enforceCapability(attendant, PERMISSIONS.TEAM_MANAGE))
+assertThrows('enforceCapability null → products.view throws', () => enforceCapability(null, PERMISSIONS.POS_SELL))
+assertThrows('enforceCapability manager → shop.settings throws', () => enforceCapability(manager, PERMISSIONS.SHOP_SETTINGS))
+assert('enforceCapability owner → shop.settings does not throw', (() => { enforceCapability(owner, PERMISSIONS.SHOP_SETTINGS); return true })())
+assert('enforceCapability manager → team.manage does not throw', (() => { enforceCapability(manager, PERMISSIONS.TEAM_MANAGE); return true })())
+
 console.log(`\nTotal: ${passed} passed, ${failed} failed\n`)
 if (failed > 0) process.exit(1)

@@ -1,7 +1,10 @@
-// bottom-tab-bar.tsx — Role-based bottom tab bar for mobile
-// Attendant: [Sell] [Customers] [Receipts]
-// Inventory (manager+): [Scan] [Stock] [Receive]
-// Manager/Owner: [Dashboard] [Sales] [Approvals] [Reports]
+// bottom-tab-bar.tsx — Capability-based bottom tab bar for mobile
+// Phase 04: tabs are gated by SDK capabilities, not raw role strings.
+//
+// Attendant (inventory.view only): [Sell] [Customers] [Receipts]
+// + inventory.view: [Scan] [Stock] [Receive]
+// + reports.view: [Dashboard] [Reports]
+// Manager/Owner: all tabs
 import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, Text } from 'react-native'
 import { useRouter, usePathname } from 'expo-router'
@@ -21,6 +24,8 @@ interface TabDef {
   label: string
   href: string
   icon: (active: boolean, color: string) => React.ReactElement
+  /** Phase 04: capability required to show this tab (coarse permission name) */
+  requiredCapability?: string
 }
 
 const ATTENDANT_TABS: TabDef[] = [
@@ -41,6 +46,18 @@ const MANAGER_TABS: TabDef[] = [
   { key: 'approvals', label: 'Approvals', href: '/(tabs)/approvals', icon: (a, c) => <CheckCircle size={22} color={c} /> },
 ]
 
+// Phase 04 coarse-capability constants — must match sdk-bridge/rbac.ts PERMISSIONS
+const CAP = {
+  INVENTORY_VIEW: 'inventory.view',
+  REPORTS_VIEW:   'reports.view',
+} as const
+
+// Maps capabilities → tabs that require them
+const CAPABILITY_TABS: Record<string, TabDef[]> = {
+  [CAP.INVENTORY_VIEW]: INVENTORY_TABS,
+  [CAP.REPORTS_VIEW]:   MANAGER_TABS,
+}
+
 const ICON_SIZE = 22
 
 export function BottomTabBar() {
@@ -49,23 +66,49 @@ export function BottomTabBar() {
   const insets   = useSafeAreaInsets()
   const { effectiveScheme } = useAppTheme()
   const { menuOpen, toggleMenu } = useMenu()
-  const [role, setRole] = useState<EmployeeRole | null>(null)
+  const [capabilities, setCapabilities] = useState<Set<string>>(new Set())
 
   const isDark = effectiveScheme === 'dark'
   const barBg  = isDark ? colors.dark.card : '#ffffff'
   const s      = makeStyles(isDark, barBg)
 
   useEffect(() => {
+    // Phase 04: load role and derive capabilities from role defaults
     AsyncStorage.getItem(EMPLOYEE_ROLE_KEY).then((r) => {
-      if (r === 'owner' || r === 'manager') setRole(r)
-      else setRole('attendant')
+      const role = r as EmployeeRole | null
+      const caps = deriveCapabilities(role)
+      setCapabilities(caps)
     })
   }, [])
 
+  /**
+   * Phase 04: Derive coarse capabilities from role.
+   * Mirrors @soostori/auth ROLE_DEFAULT_CAPABILITIES resolution.
+   * This is a client-side convenience — actual enforcement uses SDK can().
+   */
+  function deriveCapabilities(role: EmployeeRole | null): Set<string> {
+    const all: string[] = []
+    if (!role) return new Set()
+
+    if (role === 'owner') {
+      // owner has everything
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
+    }
+    if (role === 'manager') {
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, 'pos.sell', 'team.manage'])
+    }
+    if (role === 'attendant') {
+      return new Set([CAP.INVENTORY_VIEW])
+    }
+    return new Set()
+  }
+
   function getTabs(): TabDef[] {
-    if (role === 'manager') return [...ATTENDANT_TABS, ...INVENTORY_TABS, ...MANAGER_TABS]
-    if (role === 'owner') return [...ATTENDANT_TABS, ...INVENTORY_TABS, ...MANAGER_TABS]
-    return ATTENDANT_TABS
+    const tabs: TabDef[] = [...ATTENDANT_TABS]
+    // Phase 04: add tabs based on capabilities, not role strings
+    if (capabilities.has(CAP.INVENTORY_VIEW)) tabs.push(...INVENTORY_TABS)
+    if (capabilities.has(CAP.REPORTS_VIEW))   tabs.push(...MANAGER_TABS)
+    return tabs
   }
 
   function isActive(href: string) {
