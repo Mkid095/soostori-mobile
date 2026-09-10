@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Cycle 04 Sub-cycle D — Mobile Local-Schema ↔ SDK Data Contract Alignment
+
+- **NEW: `src/lib/contracts-mapper.ts`**: read-side mapping layer from Mobile's `expo-sqlite` rows to `@soostori/contracts@0.1.0-alpha.1` canonical entities. 13 mappers — `fromLocalBusiness`, `fromLocalEmployee`, `fromLocalDevice`, `fromLocalInvitation`, `fromLocalProduct`, `fromLocalCategory`, `fromLocalStockMovement`, `fromLocalSale`, `fromLocalSaleLineItem`, `fromLocalCustomer`, `fromLocalDebt`, `fromLocalDebtPayment`, `fromLocalExpense`. Aliased local columns (`shop_id` → `businessId`, `is_active` → `status`, `amount_paid` → `balance`, `reference_id` → `idempotencyKey`, `mpesa` → `mobile_money`, etc.) per `reports/2025-cycle-04/D-mobile-schema-audit.md`. ≤ 150 lines, no helpers.ts.
+- **UPD: `package.json`**: added `"@soostori/contracts": "workspace:*"` dependency.
+- **UPD: `jest.config.json`**: added `@soostori/contracts` → local mock redirect; existing `@soostori/core` redirect moved to local mock (CJS runtime — the real `dist/` is ESM-only and jest can't `require()` it).
+- **NEW: `src/__mocks__/soostori-core.ts`**: CJS jest mock mirroring the `asXxx()` brand-cast surface the mapper needs at runtime (40 lines).
+- **NEW: `src/__mocks__/soostori-contracts.ts`**: CJS jest mock with the `NoOpSyncEngine` stub for Sub-cycle E wiring (14 lines).
+- **NEW: `src/services/__tests__/contracts-mapper.spec.ts`**: 9 jest tests — product/sale/customer/employee/device/stock-movement/debt/expense/business/category/invitation/sale-line-item round-trip projections, default fallbacks for MISSING columns, contract type assertions, enum projection (`mpesa` → `mobile_money`, `SALE` → `sale`, `OPENING_STOCK` → `openingStock`, `ADJUST` → `correction`).
+- **UPD: `reports/2025-cycle-04/D-mobile-schema-audit.md`**: NEW — full 22-entity table × contract matrix (MATCH / SHADOW / MISSING / EXTRA / N/A), `shop_id` ↔ `businessId` aliasing rationale, decisions on what to add vs. read-side-only.
+- **UPD: `reports/2025-cycle-04/D-mobile-schema-status.md`**: NEW — feature status PASS.
+- **PRESERVED**: cycle-03 Sub-B §17/§84 auto-shop-creation removal (no new `INSERT INTO shops` introduced); cycle-03 Sub-G `shop_id` column naming kept (mapper handles `businessId` alias); all 6 PERSON_NOT_FOUND tests still pass; `npx tsc --noEmit` clean.
+
 ### §17/§84 — Auto-shop-creation removed from Mobile auth paths
 
 - **FIX: `src/services/cloud-auth-backend.ts`**: `cloudVerifyMagicCode` and `cloudExchangeGoogleToken` no longer create a `shops` row on first sign-in. After successful cloud auth, both functions now look up an existing `employees` row for the authenticated email; if none exists (or the referenced shop is missing), they return `{ ok: false, code: 'PERSON_NOT_FOUND' }` instead of provisioning a free `plan:'free'` shop. Return type is now a discriminated union `CloudAuthResult = { ok: true, response: CloudAuthResponse } | { ok: false, code: 'PERSON_NOT_FOUND' }` (re-exported from `src/services/cloud-auth.ts`).

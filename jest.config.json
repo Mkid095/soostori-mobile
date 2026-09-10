@@ -15,7 +15,8 @@
     "^expo-router$": "<rootDir>/src/__mocks__/expo-router.ts",
     "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/async-storage.ts",
     "^@fidscript/instant-react$": "<rootDir>/src/__mocks__/fidscript-instant-react.ts",
-    "^@soostori/core$": "<rootDir>/node_modules/@soostori/core/dist/index.js",
+    "^@soostori/core$": "<rootDir>/src/__mocks__/soostori-core.ts",
+    "^@soostori/contracts$": "<rootDir>/src/__mocks__/soostori-contracts.ts",
     ".*/lib/db$": "<rootDir>/src/__mocks__/db.ts"
   }
 }
