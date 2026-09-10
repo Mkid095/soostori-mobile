@@ -8,9 +8,10 @@ interface Props {
   onBack: () => void
   onSuccess: () => void
   onLoadingChange: (loading: boolean) => void
+  onPersonNotFound?: (email: string) => void
 }
 
-export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
+export function LoginForm({ onBack, onSuccess, onLoadingChange, onPersonNotFound }: Props) {
   const theme = useTheme()
   const [email, setEmail] = useState('')
   const [magicCode, setMagicCode] = useState('')
@@ -42,8 +43,18 @@ export function LoginForm({ onBack, onSuccess, onLoadingChange }: Props) {
     }
     onLoadingChange(true)
     try {
-      const response = await cloudVerifyMagicCode(email.trim(), magicCode.trim())
-      onSuccess()
+      const result = await cloudVerifyMagicCode(email.trim(), magicCode.trim())
+      if (result.ok) {
+        onSuccess()
+      } else if (result.code === 'PERSON_NOT_FOUND') {
+        // §17/§84: person authenticated but no Soostori membership — bubble
+        // up to the welcome screen so it can render the §29 contact phone.
+        onPersonNotFound?.(email.trim())
+      } else {
+        Alert.alert('Verification Failed', 'Invalid code')
+        setStep('email')
+        setMagicCode('')
+      }
     } catch (err) {
       Alert.alert('Verification Failed', err instanceof Error ? err.message : 'Invalid code')
       setStep('email')

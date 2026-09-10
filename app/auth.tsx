@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Store, ChevronDown } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
 import { PinKeypad } from '../src/components/auth/pin-keypad'
+import { PersonNotFoundScreen } from '../src/components/auth/person-not-found-screen'
 import { JoinShopSheet } from '../src/components/shared/join-shop-sheet'
 import { EmployeePickerModal } from '../src/components/auth/employee-picker-modal'
 import { useAuthSdk } from '../src/hooks/useAuthSdk'
@@ -16,7 +17,7 @@ const PIN_LENGTH = 4
 const EMPLOYEE_ID_KEY = '@soostori:employeeId'
 const EMPLOYEE_ROLE_KEY = '@soostori:employeeRole'
 
-type Step = 'select' | 'cloud_auth' | 'enrollment' | 'pin_verify' | 'pin_setup' | 'loading'
+type Step = 'select' | 'cloud_auth' | 'enrollment' | 'pin_verify' | 'pin_setup' | 'loading' | 'person_not_found'
 
 export default function AuthScreen() {
   const theme = useTheme()
@@ -97,6 +98,12 @@ export default function AuthScreen() {
       const googleUser = await signInWithGoogle()
       const result = await auth.signInWithGoogle(googleUser.idToken)
       if (!result.ok) {
+        // §17/§84: no membership for this authenticated person — show the
+        // §29 contact phone, do not attempt to create a shop.
+        if (result.error?.code === 'PERSON_NOT_FOUND') {
+          setStep('person_not_found')
+          return
+        }
         Alert.alert('Sign-In Error', result.error?.message ?? 'Authentication failed')
         setStep('select')
         return
@@ -167,6 +174,17 @@ export default function AuthScreen() {
   const dots = Array.from({ length: PIN_LENGTH }).map((_, i) => (
     <View key={i} style={[styles.dot, { backgroundColor: i < pin.length ? theme.brand : 'transparent', borderColor: i < pin.length ? theme.brand : theme.muted }]} />
   ))
+
+  // §17/§84: short-circuit the whole auth UI to the §29 contact screen
+  // when the authenticated person has no Soostori membership.
+  if (step === 'person_not_found') {
+    return (
+      <PersonNotFoundScreen
+        email={auth.cloudUser?.email ?? null}
+        onBack={() => { setStep('select'); setError('') }}
+      />
+    )
+  }
 
   // Determine what to show in the PIN pad area
   const showPinPad = step === 'pin_verify' || step === 'pin_setup'

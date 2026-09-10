@@ -6,13 +6,24 @@ import { Store, LogIn, Users } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
 import { LoginForm } from '../src/components/auth/login-form'
 import { JoinShopForm } from '../src/components/auth/join-shop-form'
+import { PersonNotFoundScreen } from '../src/components/auth/person-not-found-screen'
 
-type Step = 'choice' | 'login' | 'join'
+type Step = 'choice' | 'login' | 'join' | 'person_not_found'
 
 export default function WelcomeScreen() {
   const theme = useTheme()
   const [step, setStep] = useState<Step>('choice')
   const [isLoading, setIsLoading] = useState(false)
+  const [notFoundEmail, setNotFoundEmail] = useState<string | null>(null)
+
+  if (step === 'person_not_found') {
+    return (
+      <PersonNotFoundScreen
+        email={notFoundEmail}
+        onBack={() => { setStep('choice'); setNotFoundEmail(null) }}
+      />
+    )
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -63,6 +74,10 @@ export default function WelcomeScreen() {
               onBack={() => setStep('choice')}
               onSuccess={() => router.replace('/(tabs)/pos')}
               onLoadingChange={setIsLoading}
+              onPersonNotFound={(email) => {
+                setNotFoundEmail(email)
+                setStep('person_not_found')
+              }}
             />
           )}
 
