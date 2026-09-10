@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '../../hooks/useTheme'
 import { MenuProvider } from '../../hooks/MenuContext'
+import { BusinessProvider } from '../../hooks/BusinessContext'
 import { useCloudSync } from '../../hooks/useCloudSync'
 import { useDeviceHeartbeat } from '../../hooks/useDeviceHeartbeat'
 import { isWithinGraceWindow } from '../../services/entitlement-cache'
@@ -20,6 +21,7 @@ import { getUpdateState } from '../../services/db-update-state'
 import { getQueryClient } from '../../lib/query-client'
 import { getDb } from '../../lib/db'
 import { initMobileSync, startSyncListeners, stopSyncListeners } from '../../services/mobile-sync-service'
+import { BusinessSwitcherHost } from './BusinessSwitcherHost'
 
 type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
 
@@ -87,13 +89,16 @@ export function RootLayoutContent() {
     <QueryClientProvider client={getQueryClient()}>
       <ThemeProvider>
         <MenuProvider>
-          <StatusBar style="dark" />
-          <UpdateBanner />
-          <Stack screenOptions={{ headerShown: false }}>
-            {authState === 'welcome' && <Stack.Screen name="welcome" options={{ animation: 'fade' }} />}
-            {authState === 'auth' && <Stack.Screen name="auth" options={{ animation: 'fade' }} />}
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+          <BusinessProvider>
+            <StatusBar style="dark" />
+            <UpdateBanner />
+            <Stack screenOptions={{ headerShown: false }}>
+              {authState === 'welcome' && <Stack.Screen name="welcome" options={{ animation: 'fade' }} />}
+              {authState === 'auth' && <Stack.Screen name="auth" options={{ animation: 'fade' }} />}
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+            <BusinessSwitcherHost />
+          </BusinessProvider>
         </MenuProvider>
       </ThemeProvider>
     </QueryClientProvider>

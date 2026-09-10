@@ -4,10 +4,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Sun, Moon, Settings, Database, RefreshCw } from 'lucide-react-native'
+import { Sun, Moon, Settings, Database, RefreshCw, Building2, ChevronRight } from 'lucide-react-native'
 import { useTheme, useAppTheme } from '../../hooks/useTheme'
 import { getPendingSyncCount } from '../../services/sync-queue-helper'
 import { BellButton } from './bell-button'
+import { useActiveBusiness } from '../../hooks/BusinessContext'
 
 interface Props {
   title?: string
@@ -15,12 +16,14 @@ interface Props {
   showToggle?: boolean
   showBell?: boolean
   showSettings?: boolean
+  onBusinessSwitch?: () => void
 }
 
-export function AppHeader({ title, showSync = true, showToggle = true, showBell = false, showSettings = true }: Props) {
+export function AppHeader({ title, showSync = true, showToggle = true, showBell = false, showSettings = true, onBusinessSwitch }: Props) {
   const { bg, text, border, brand } = useTheme()
   const { effectiveScheme, toggleScheme } = useAppTheme()
   const router = useRouter()
+  const { activeBusiness, openSwitcher } = useActiveBusiness()
 
   const [pendingSync, setPendingSync] = useState(0)
   const [syncLoading, setSyncLoading] = useState(false)
@@ -50,7 +53,17 @@ export function AppHeader({ title, showSync = true, showToggle = true, showBell 
   return (
     <View style={[s.container, { backgroundColor: bg, borderBottomWidth: 1, borderBottomColor: border }]}>
       <View style={s.left}>
-        <Text style={[s.title, { color: text }]} numberOfLines={1}>{title || 'Soostori'}</Text>
+        {onBusinessSwitch && activeBusiness ? (
+          <TouchableOpacity onPress={onBusinessSwitch} activeOpacity={0.7} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: brand + '20', justifyContent: 'center', alignItems: 'center' }}>
+              <Building2 size={14} color={brand} />
+            </View>
+            <Text style={[s.businessName, { color: text }]} numberOfLines={1}>{activeBusiness.businessName}</Text>
+            <ChevronRight size={14} color={text} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+        ) : (
+          <Text style={[s.title, { color: text }]} numberOfLines={1}>{title || 'Soostori'}</Text>
+        )}
       </View>
 
       <View style={s.right}>
@@ -91,6 +104,7 @@ const s = StyleSheet.create({
   left: { flex: 1, minWidth: 0 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: { fontSize: 17, fontWeight: '800' },
+  businessName: { fontSize: 15, fontWeight: '700' },
   iconBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   badge: {
     position: 'absolute', top: 3, right: 3,

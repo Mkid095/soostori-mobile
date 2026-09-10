@@ -20,6 +20,7 @@ import {
   LayoutDashboard,
   BadgeCheck,
   Smartphone,
+  Building2,
 } from 'lucide-react-native'
 import type { EmployeeRole } from '../../lib/sync-protocol'
 
@@ -57,6 +58,7 @@ export const ALL_MENU_ITEMS: NavItem[] = [
   { label: 'Notifications', href: '/(tabs)/notifications',   icon: <Bell size={22} />,               roles: ['attendant', 'manager', 'owner'] },
   { label: 'Support',      href: '/(tabs)/support',         icon: <HelpCircle size={22} />,          roles: ['attendant', 'manager', 'owner'] },
   { label: 'Settings',     href: '/(tabs)/settings',        icon: <Settings size={22} />,           roles: ['attendant', 'manager', 'owner'] },
+  { label: 'Business Setup', href: '/business-setup',       icon: <Building2 size={22} />,         roles: ['manager', 'owner'] },
 ]
 
 // Hook to get filtered menu items based on current employee role

@@ -7,7 +7,7 @@ import { useTheme } from '../../src/hooks/useTheme'
 import { useEmployee } from '../../src/hooks/useEmployee'
 import {
   Store, Palette, CreditCard, Scan, Printer,
-  Database, Info, Shield, LogOut, Wifi,
+  Database, Info, Shield, LogOut, Wifi, Building2,
 } from 'lucide-react-native'
 
 import { SettingsSectionCard } from '../../src/components/settings/settings-section-card'
@@ -114,6 +114,15 @@ export default function SettingsScreen() {
 
       {/* Section cards */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 88 }} showsVerticalScrollIndicator={false}>
+        {/* Business Setup — owner/manager only */}
+        {isOwnerOrManager && (
+          <SettingsSectionCard
+            icon={<Building2 size={22} color="#f97316" />}
+            title="Business Setup"
+            description="Create or manage your business"
+            onPress={() => router.push('/business-setup')}
+          />
+        )}
         {SECTIONS.map((section) => {
           if (section.id === 'lan') {
             return (

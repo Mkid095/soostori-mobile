@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, Text } from 'react-native'
 import { useRouter, usePathname } from 'expo-router'
-import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X } from 'lucide-react-native'
+import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X, DollarSign } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAppTheme } from '../../hooks/useTheme'
@@ -46,16 +46,26 @@ const MANAGER_TABS: TabDef[] = [
   { key: 'approvals', label: 'Approvals', href: '/(tabs)/approvals', icon: (a, c) => <CheckCircle size={22} color={c} /> },
 ]
 
+// Phase 06 — Commissions tab (team.view capability gate)
+const COMMISSION_TAB: TabDef = {
+  key: 'commissions',
+  label: 'Commissions',
+  href: '/(tabs)/commissions',
+  icon: (a, c) => <DollarSign size={22} color={c} />,
+}
+
 // Phase 04 coarse-capability constants — must match sdk-bridge/rbac.ts PERMISSIONS
 const CAP = {
   INVENTORY_VIEW: 'inventory.view',
   REPORTS_VIEW:   'reports.view',
+  TEAM_VIEW:      'team.view',
 } as const
 
 // Maps capabilities → tabs that require them
 const CAPABILITY_TABS: Record<string, TabDef[]> = {
   [CAP.INVENTORY_VIEW]: INVENTORY_TABS,
   [CAP.REPORTS_VIEW]:   MANAGER_TABS,
+  [CAP.TEAM_VIEW]:     [COMMISSION_TAB],
 }
 
 const ICON_SIZE = 22
@@ -92,10 +102,10 @@ export function BottomTabBar() {
 
     if (role === 'owner') {
       // owner has everything
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
     }
     if (role === 'manager') {
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, 'pos.sell', 'team.manage'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, 'pos.sell', 'team.manage'])
     }
     if (role === 'attendant') {
       return new Set([CAP.INVENTORY_VIEW])

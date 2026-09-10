@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 07 — Business Setup (Mobile)
+
+**What changed:** Added Business Setup screen and Business Switcher for the mobile app. Owners/managers can create a new business (name, type, country, currency, owner info). Business Switcher lists all businesses the user has membership in and lets them switch the active business context.
+
+**Files created:**
+- `src/types/types-business-setup.ts` — `BusinessType`, `BusinessSetupInput`, `BusinessSetupResult`, `BusinessListItem` interfaces.
+- `src/services/cloud-business-setup.ts` — `businessSetup()` orchestrating: Person → Business → Membership (owner) → BusinessSettings → default Category. Also `listMyBusinesses()`, `setActiveBusiness()`, `getActiveBusinessId()` for switcher.
+- `src/hooks/useBusinessSetup.ts` — `useBusinessSetup()` hook with owner/manager RBAC gate, calls `businessSetup()` service.
+- `src/hooks/useBusinessSwitcher.ts` — `useBusinessSwitcher()` hook: lists memberships via `invitations` table, resolves shop names, provides `switchTo()` to set active business in AsyncStorage.
+- `src/hooks/BusinessContext.tsx` — `BusinessProvider` + `useActiveBusiness()`: global context for active business, exposes `openSwitcher()` / `closeSwitcher()` for the switcher modal.
+- `app/business-setup.tsx` — Business Setup screen: validated form (business name min 2 chars, E.164 phone, optional email), country/currency selects (default KE/KES), owner/manager gate, success state.
+- `app/business-switcher.tsx` — `BusinessSwitcherSheet` modal: lists user's businesses with active indicator, tap to switch.
+- `src/components/app/BusinessSwitcherHost.tsx` — Root-level overlay host for the switcher modal.
+- `src/components/app/root-layout-content.tsx` — Integrated `BusinessProvider` and `BusinessSwitcherHost` into the app root.
+- `src/services/__tests__/business-setup-mobile.spec.ts` — 7 tests: happy path all entities created (P1), person reuse by phone (P2), person reuse by email (P3), validation error on missing businessName (P4), result shape (P5), active business AsyncStorage (P6), RBAC gate non-owner/manager (P7).
+
+**Verification:** `npx jest` — 40/40 pass (6 test suites). tsc — pre-existing react-native type errors excluded per brief; all Phase 07 files type-safe.
+
+### Phase 06 — Commercial: My Commissions Screen (Mobile)
+
+**What changed:** Added "My Commissions" tab for salesperson role — displays enrolled businesses, package amounts, and calculated monthly commission using the Phase 06 formula.
+
+**Files created:**
+- `src/types/types-commission.ts` — `CommissionBreakdown`, `EnrolledBusiness`, `CommissionSummary` interfaces, and `calculateCommission(packageAmount)` function implementing the Phase 06 formula:
+  - Company_share = 500 + 25% × max(0, packageAmount − 600)
+  - Salesperson_share = 100 + 75% × max(0, packageAmount − 600)
+  - Influencer_share = 50 flat (paid by company)
+- `src/services/cloud-commission.ts` — `fetchCommissionSummary(salespersonId)` using instant-self MCP (`db.queryOnce`) to fetch packages and businesses enrolled by this salesperson, aggregates commission totals.
+- `src/hooks/useCommission.ts` — `useCommission()` hook: reads employeeId from AsyncStorage, gates with `team.view` capability via `enforceCapability`, fetches commission data from cloud.
+- `app/(tabs)/commissions.tsx` — Full "My Commissions" screen: summary card with total monthly commission, worked example table (600/1000/2000 KES with all three shares), enrolled businesses list with per-business commission breakdown, capability-gated (shows message for non-salespeople).
+- `src/services/__tests__/commission-mobile.spec.ts` — 10 tests: formula verification at 600/1000/2000/0/−100 KES (P1–P5); cloud fetch at empty, two packages, inactive packages, wrong salesperson, orphaned business (P6–P10).
+
+**Files modified:**
+- `src/lib/instant-client.ts` — Added `packages` and `businesses` entities to the FIDScript schema for Phase 06 commercial data.
+- `src/__mocks__/fidscript-instant-react.ts` — Added `packages` and `businesses` to mock state + `queryOnce` handler for Phase 06 tests.
+- `src/services/sdk-bridge/rbac.ts` — Added `TEAM_VIEW: 'team.view'` to `PERMISSIONS` constant.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `DollarSign` icon, `COMMISSION_TAB` definition, `CAP.TEAM_VIEW = 'team.view'`, mapping `CAPABILITY_TABS[CAP.TEAM_VIEW] → [COMMISSION_TAB]`, and `CAP.TEAM_VIEW` to owner/manager `deriveCapabilities` sets.
+
+**Gate:** `team.view` capability required to see the Commissions tab and screen. Owner and manager roles include `team.view` by default.
+
+**Data:** Commission data is fetched from cloud via instant-self MCP (`db.queryOnce` on `packages` + `businesses` entities), filtered by the logged-in employee's ID as the enrolling salesperson.
+
+**`npx jest`:** 33/33 pass (23 pre-existing + 10 Phase 06).
+**`npx tsc --noEmit`:** zero new errors introduced by Phase 06 changes.
+
 ### Phase 05 — Real Synchronization (Mobile)
 
 **What changed:** `NoOpSyncEngine` replaced with real FIDScript-backed engine; Mobile can now push products/sales to cloud and pull cloud events into local SQLite.

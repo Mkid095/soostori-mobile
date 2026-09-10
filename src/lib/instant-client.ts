@@ -123,6 +123,26 @@ const schema = i.schema({
       type: i.string(),
       details: i.any(),
     }),
+    // Phase 06 — Commercial: packages and businesses for commission display
+    packages: i.entity({
+      id: i.string().unique().indexed(),
+      businessId: i.string().indexed(),
+      name: i.string(),
+      amount: i.number(),
+      salespersonId: i.string().indexed(),
+      isActive: i.boolean(),
+      createdAt: i.string(),
+    }),
+    businesses: i.entity({
+      id: i.string().unique().indexed(),
+      name: i.string(),
+      ownerName: i.string(),
+      phone: i.string(),
+      email: i.string(),
+      status: i.string(),
+      enrolledBy: i.string().indexed(),
+      createdAt: i.string(),
+    }),
   },
 })
 

@@ -13,6 +13,10 @@ const state: any = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   subscriptions: [] as any[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  packages: [] as any[],   // Phase 06: commercial packages
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  businesses: [] as any[], // Phase 06: enrolled businesses
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   shopCreateCount: 0,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deviceCreateCount: 0,
@@ -25,6 +29,8 @@ const state: any = {
     this.shops = []
     this.devices = []
     this.subscriptions = []
+    this.packages = []
+    this.businesses = []
     this.shopCreateCount = 0
     this.deviceCreateCount = 0
     this.authUserForMagicCode = null
@@ -85,6 +91,8 @@ const mockDb = {
     if ('shops' in query) return { data: { shops: state.shops } }
     if ('devices' in query) return { data: { devices: state.devices } }
     if ('subscriptions' in query) return { data: { subscriptions: state.subscriptions } }
+    if ('packages' in query) return { data: { packages: state.packages } }
+    if ('businesses' in query) return { data: { businesses: state.businesses } }
     return { data: {} }
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
