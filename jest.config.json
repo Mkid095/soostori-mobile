@@ -1,0 +1,21 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "testMatch": ["<rootDir>/src/**/*.spec.ts"],
+  "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json"],
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.json", "isolatedModules": true, "diagnostics": false }]
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@fidscript|@soostori|@react-native|react-native|expo.*|@expo.*|@instantdb))"
+  ],
+  "moduleNameMapper": {
+    "^react-native$": "<rootDir>/src/__mocks__/react-native.ts",
+    "^expo-secure-store$": "<rootDir>/src/__mocks__/expo-secure-store.ts",
+    "^expo-router$": "<rootDir>/src/__mocks__/expo-router.ts",
+    "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/async-storage.ts",
+    "^@fidscript/instant-react$": "<rootDir>/src/__mocks__/fidscript-instant-react.ts",
+    "^@soostori/core$": "<rootDir>/node_modules/@soostori/core/dist/index.js",
+    ".*/lib/db$": "<rootDir>/src/__mocks__/db.ts"
+  }
+}
