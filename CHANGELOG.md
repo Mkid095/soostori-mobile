@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 04 — RBAC: Capability Registry (Mobile)
+
+**What changed:** Role-default checks (`role === 'owner'`) replaced with SDK `hasCapability`/`can` calls.
+
+**Service layer:**
+- `src/services/sdk-bridge/rbac.ts`: new `CAPABILITY_PERMISSION_MAP` (coarse mobile permission → SDK capability string), new `enforceCapability(member, permission)` using Member+hasCapability resolution (override-first, then role bundle). Also keeps legacy `roleHas`/`enforcePermission` for backward compat.
+- `src/services/session-helper.ts`: new `getCurrentMember()` returning SDK `Member` object (role + optional `memberCapabilityOverrides`).
+- `src/services/db-employees.ts`: `createEmployee` and `updateEmployeePin` now call `enforceCapability(member, PERMISSIONS.TEAM_MANAGE)` instead of legacy `enforcePermission(role, ...)`.
+
+**UI:**
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx`: tabs gated by capability presence (`inventory.view` → Scan/Stock/Receive tabs; `reports.view` → Dashboard/Reports/Approvals tabs). Role strings removed entirely from tab routing logic.
+
+**SDK sync (node_modules/@soostori/auth):**
+- `dist/permissions.js` + `permissions.d.ts` synced from workspace SDK (`soostori-sdk/packages/auth/src/permissions.ts`) — adds `CAPABILITIES`, `ALL_CAPABILITIES`, `ROLE_DEFAULT_CAPABILITIES`, `Member` interface, `hasCapability(member, capability)`, `can(member, capability)`.
+- `package.json` exports: added `"./permissions"` subpath for stable TS module resolution.
+- `dist/pin-rn.d.ts`: re-exports `Member`, `Capability`, `hasCapability`, `can` (required because TS `Bundler` resolver picks `react-native` condition → `pin-rn.d.ts` for `@soostori/auth` imports).
+
+**Tests:** `src/services/sdk-bridge/__tests__/rbac-enforcement.test.ts` — Phase 04 block adds 17 test cases for `hasCapability`/`enforceCapability` covering owner/manager/attendant/null members, `memberCapabilityOverrides`, and `PermissionDeniedError` type.
+
+**`npx jest`:** 19/19 pass.
+**`npx tsc --noEmit`:** zero errors in modified files.
+
 ### Phase 0 Item 1 — Mobile: bump @soostori/core to ^0.1.0-alpha.9
 
 - **UPD: `package.json`**: `@soostori/core` from `^0.1.0-alpha.7` → `^0.1.0-alpha.9`. `@soostori/auth` left at `^0.1.0-alpha.6`.
