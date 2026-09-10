@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Cycle 04 Sub-cycle F — Mobile `defaultSyncEngine.enqueue()` smoke wiring
+### Phase 0 Item 1 — Mobile: bump @soostori/core to ^0.1.0-alpha.9
+
+- **UPD: `package.json`**: `@soostori/core` from `^0.1.0-alpha.7` → `^0.1.0-alpha.9`. `@soostori/auth` left at `^0.1.0-alpha.6`.
+- **UPD: `@soostori/core` dist** (node_modules): copied from `soostori-sdk/packages/core/dist` — brand helpers (`asBusinessId`, `asStockMovementId`, `asIdempotencyKey`, `asCommissionRuleId`, `asCommissionLedgerId`, `asSalespersonApplicationId`, `asInfluencerProfileId`, `asAuthAuditEventId`) now available; `ShopId` aliased to `BusinessId` per Cycle 04 §10.
+- **FIX: `soostori-sdk/packages/core/src/ids.ts`**: added missing `asExpenseId` helper (type existed; helper was absent in alpha.9 source).
+- **VERIFIED**: `npx tsc --noEmit` — zero `@soostori/*` errors (pre-existing 612 React type-stub errors unrelated to this bump). `npx jest` — 19/19 tests pass.
+
+### Cycle 04 Sub-cycle F
 
 - **UPD: `src/services/db-products-create.ts`**: after the sqlite INSERT lands, the service now constructs and enqueues a canonical `SyncEvent<Product>` on `defaultSyncEngine` (from `@soostori/contracts`) via the Sub-D `fromLocalProduct` mapper. Fire-and-forget so a sync-engine hiccup never breaks the local INSERT path. The pre-existing `queueSync('products', 'create', id)` call is preserved.
 - **UPD: `src/services/db-sale-create.ts`**: same pattern — builds the `SyncEvent<Sale>` from the just-inserted row using `fromLocalSale`, enqueues on `defaultSyncEngine` after the transactional commit. `queueSync('sales', 'create', id, shopId)` preserved.
