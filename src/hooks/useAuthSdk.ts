@@ -15,7 +15,7 @@ type AuthErrorCode =
   | 'USER_NOT_FOUND' | 'WEAK_PASSWORD' | 'VERIFICATION_EXPIRED' | 'VERIFICATION_INVALID'
   | 'RESET_EXPIRED' | 'RESET_INVALID' | 'DEVICE_NOT_TRUSTED' | 'SESSION_REVOKED'
   | 'NETWORK_OFFLINE' | 'RATE_LIMITED' | 'OAUTH_ERROR' | 'ENROLLMENT_REQUIRED'
-  | 'PIN_VERIFICATION_FAILED' | 'PIN_NOT_SET' | 'UNKNOWN'
+  | 'PIN_VERIFICATION_FAILED' | 'PIN_NOT_SET' | 'PERSON_NOT_FOUND' | 'UNKNOWN'
 
 interface AuthError { code: AuthErrorCode; message: string; retryAfterMs?: number }
 
@@ -202,13 +202,16 @@ function buildAuthApiClient() {
       const { cloudExchangeGoogleToken } = await import('../services/cloud-auth-backend')
       try {
         const result = await cloudExchangeGoogleToken(idToken)
+        if (!result.ok) {
+          return { error: { code: 'AUTH_FAILED' as AuthErrorCode, message: result.code } }
+        }
         return {
           data: {
-            userId: result.user.id,
-            email: result.user.email,
-            displayName: result.user.email.split('@')[0],
+            userId: result.response.user.id,
+            email: result.response.user.email,
+            displayName: result.response.user.email.split('@')[0],
             idToken,
-            accessToken: result.user.id,
+            accessToken: result.response.user.id,
             refreshToken: '',
             isNewUser: false,
           },
@@ -336,28 +339,31 @@ export function useAuthSdk() {
     const email = result.data.email
     await AsyncStorage.setItem('@soostori:cloudToken', userId)
 
-    // Get or create shop
+    // §17/§84: do NOT auto-create a shop. Look up an existing employee
+    // row for this email; if none exists, surface PERSON_NOT_FOUND so
+    // the UI can show the §29 contact phone.
+    const employeesResult = await db.queryOnce({ employees: {} })
+    const cloudEmployees = (employeesResult.data.employees as Array<{ id: string; shopId: string; email?: string; role?: string; hasPin?: boolean }>) || []
+    const existing = cloudEmployees.find((e) => e.email === email)
+    if (!existing) {
+      setState(s => ({ ...s, isLoading: false, error: 'PERSON_NOT_FOUND' }))
+      return { ok: false, error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'No Soostori membership for this account' } } as AuthResult<never>
+    }
+
     const shopsResult = await db.queryOnce({ shops: {} })
-    let shop = (shopsResult.data.shops as any[])?.[0]
+    const cloudShops = (shopsResult.data.shops as Array<{ id: string; name: string; slug?: string; status?: string; plan?: string }>) || []
+    const shop = cloudShops.find((s) => s.id === existing.shopId)
     if (!shop) {
-      const shopId = id()
-      await db.transact(db.tx.shops[shopId].create({
-        id: shopId,
-        name: 'My Shop',
-        slug: `shop-${Date.now()}`,
-        taxRate: 0,
-        plan: 'free',
-        subscriptionExpiry: '',
-        status: 'active',
-      }))
-      shop = { id: shopId, name: 'My Shop', slug: `shop-${Date.now()}`, status: 'active', plan: 'free' }
+      setState(s => ({ ...s, isLoading: false, error: 'PERSON_NOT_FOUND' }))
+      return { ok: false, error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'Business record missing' } } as AuthResult<never>
     }
 
     const shopId = shop.id
     const deviceId = deviceIdRef.current || ''
 
-    // Cache session to AsyncStorage
-    await cacheSession(shopId, userId, 'owner')
+    // Cache session to AsyncStorage (no auto-create; the employee already
+    // exists in the cloud with the correct shopId).
+    await cacheSession(shopId, existing.id, existing.role ?? 'attendant')
     await AsyncStorage.setItem('@soostori:shopId', shopId)
 
     // Register or find device in cloud
