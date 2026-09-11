@@ -12,7 +12,7 @@ import {
 import type {
   Business, Employee, Device, Invitation, Product, Category,
   StockMovement, StockMovementOperation, Sale, SaleLineItem, Customer,
-  Debt, DebtPayment, Expense, PaymentMethod, DebtStatus,
+  Debt, DebtPayment, PaymentMethod, DebtStatus,
 } from '@soostori/contracts'
 type Row = Record<string, unknown>
 const s = (v: unknown): string => v == null ? '' : String(v)
@@ -143,9 +143,17 @@ export function fromLocalDebtPayment(r: Row): DebtPayment {
     paymentMethod: pm(r.payment_method) as DebtPayment['paymentMethod'],
     paymentRef: sn(r.reference), idempotencyKey: asIdempotencyKey(s(r.id)),
     timestamp: iso(r.created_at), createdAt: iso(r.created_at),
-    updatedAt: iso(r.created_at), version: ver } }export function fromLocalExpense(r: Row, categoryName?: string): Expense {
-  return { id: asExpenseId(s(r.id)), businessId: asBusinessId(s(r.businessId)),
+    updatedAt: iso(r.created_at), version: ver } }export function fromLocalExpense(r: Row, categoryName?: string): any {
+  const entity = {
+    id: asExpenseId(s(r.id)), businessId: asBusinessId(s(r.businessId)),
     categoryName: categoryName ?? sn(r.category_name) ?? '', amount: n(r.amount),
     employeeId: asEmployeeId(s(r.employee_id)),
     note: sn(r.description ?? r.note), date: sn(r.date) ?? '', reference: sn(r.reference),
-    createdAt: iso(r.created_at), updatedAt: iso(r.updated_at ?? r.created_at), version: ver } }
+    createdAt: iso(r.created_at), updatedAt: iso(r.updated_at ?? r.created_at), version: ver,
+    status: String(r.status || 'pending') as 'pending' | 'approved' | 'paid',
+    paidAt: sn(r.paid_at) ?? undefined,
+    vendor: sn(r.vendor) ?? undefined,
+    createdBy: sn(r.created_by) ?? undefined,
+  }
+  return entity
+}

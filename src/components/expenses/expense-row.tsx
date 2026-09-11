@@ -1,10 +1,17 @@
 // ExpenseRow — single expense list item.
 // Pure presentation: tap emits onPress event.
+// Phase 12: added status badge.
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Expense } from '../../lib/types'
 import { formatCurrency } from '../../lib/formatters'
+
+const STATUS_COLORS = {
+  pending: '#F59E0B',
+  approved: '#3B82F6',
+  paid: '#10B981',
+} as const
 
 interface Props {
   expense: Expense
@@ -13,6 +20,7 @@ interface Props {
 
 export function ExpenseRow({ expense, onPress }: Props) {
   const { card, text, muted, border } = useTheme()
+  const statusColor = STATUS_COLORS[expense.status] ?? STATUS_COLORS.pending
 
   return (
     <TouchableOpacity
@@ -29,7 +37,12 @@ export function ExpenseRow({ expense, onPress }: Props) {
           <Text style={[s.ref, { color: muted }]} numberOfLines={1}>#{expense.reference}</Text>
         )}
       </View>
-      <Text style={[s.amount, { color: text }]}>{formatCurrency(expense.amount)}</Text>
+      <View style={s.right}>
+        <Text style={[s.amount, { color: text }]}>{formatCurrency(expense.amount)}</Text>
+        <View style={[s.badge, { backgroundColor: statusColor + '20' }]}>
+          <Text style={[s.badgeText, { color: statusColor }]}>{expense.status}</Text>
+        </View>
+      </View>
     </TouchableOpacity>
   )
 }
@@ -40,5 +53,8 @@ const s = StyleSheet.create({
   content: { flex: 1, minWidth: 0 },
   desc: { fontSize: 14, fontWeight: '600' },
   ref: { fontSize: 11, marginTop: 2 },
-  amount: { fontSize: 15, fontWeight: '800', marginLeft: 8 },
+  right: { alignItems: 'flex-end', gap: 4 },
+  amount: { fontSize: 15, fontWeight: '800' },
+  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
 })

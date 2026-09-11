@@ -6,8 +6,12 @@ import { getProductById } from './db-products-queries'
 import { queueSync } from './sync-queue-helper'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
-import { getCurrentRole } from './session-helper'
+import { getCurrentRole, getCurrentShopId } from './session-helper'
 import { FIELD_MAP } from './db-products-field-map'
+import { defaultSyncEngine } from '@soostori/contracts'
+import { fromLocalProduct } from '../lib/contracts-mapper'
+import { generateId } from '../lib/formatters'
+import { triggerSync } from './mobile-sync-service'
 
 async function resolveShopId(): Promise<string> {
   const stored = await AsyncStorage.getItem('@soostori:shopId')
@@ -43,7 +47,43 @@ export async function updateProduct(id: string, data: Partial<Product>): Promise
       JSON.stringify({ sellingPrice: data.sellingPrice, costPrice: data.costPrice }))
   }
   await queueSync('products', 'update', id)
+  enqueueProductUpdateSyncEvent(id)
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
   return (await getProductById(id))!
+}
+
+async function enqueueProductUpdateSyncEvent(productId: string): Promise<void> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM products WHERE id = ?', [productId],
+  )
+  if (!row) return
+  const businessId = await getCurrentShopId()
+  if (!businessId) return
+  const entity = fromLocalProduct(row)
+  await defaultSyncEngine.enqueue({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    id: generateId() as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    idempotencyKey: ((entity as { idempotencyKey?: string }).idempotencyKey ?? productId) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    businessId: String(entity.businessId) as any,
+    entityKind: 'product',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    entityId: String(entity.id) as any,
+    operation: 'update',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingDeviceId: String(entity.businessId) as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingEmployeeId: 'system' as any,
+    clientSequence: Date.now(),
+    clientCreatedAt: entity.updatedAt,
+    entityVersion: entity.version,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: entity as any,
+    state: 'pending',
+  })
 }
 
 export async function deleteProduct(id: string): Promise<void> {
@@ -52,4 +92,34 @@ export async function deleteProduct(id: string): Promise<void> {
   const db = await getDb()
   await db.runAsync('UPDATE products SET is_active = 0, updated_at = ? WHERE id = ?', [new Date().toISOString(), id])
   await queueSync('products', 'delete', id)
+  enqueueProductDeleteSyncEvent(id)
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
+}
+
+async function enqueueProductDeleteSyncEvent(productId: string): Promise<void> {
+  const businessId = await getCurrentShopId()
+  if (!businessId) return
+  await defaultSyncEngine.enqueue({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    id: generateId() as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    idempotencyKey: productId as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    businessId: businessId as any,
+    entityKind: 'product',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    entityId: productId as any,
+    operation: 'delete',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingDeviceId: businessId as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    originatingEmployeeId: 'system' as any,
+    clientSequence: Date.now(),
+    clientCreatedAt: new Date().toISOString(),
+    entityVersion: 1,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload: { id: productId } as any,
+    state: 'pending',
+  })
 }

@@ -8,7 +8,10 @@ import { queueSync } from './sync-queue-helper'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { logAudit } from './db-audit'
 import { enforceSubscriptionOrThrow } from './sdk-bridge/subscription-gate'
-import { getCurrentRole } from './session-helper'
+import { getCurrentRole, getCurrentShopId } from './session-helper'
+import { defaultSyncEngine } from '@soostori/contracts'
+import { fromLocalCategory } from '../lib/contracts-mapper'
+import { triggerSync } from './mobile-sync-service'
 
 async function resolveShopId(): Promise<string> {
   const stored = await AsyncStorage.getItem('@soostori:shopId')
@@ -36,6 +39,9 @@ export async function createCategory(data: Omit<Category, 'id' | 'createdAt' | '
   )
 
   await queueSync('categories', 'create', id)
+  enqueueCategorySyncEvent(id, 'create')
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
   return {
     id,
     name: data.name,
@@ -78,6 +84,9 @@ export async function updateCategory(
     undefined, JSON.stringify(data))
 
   await queueSync('categories', 'update', id)
+  enqueueCategorySyncEvent(id, 'update')
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
 }
 
 export async function deleteCategory(id: string): Promise<void> {
@@ -109,6 +118,9 @@ export async function deleteCategory(id: string): Promise<void> {
   await logAudit(shopId, 'CATEGORY_DELETED', 'category', id)
 
   await queueSync('categories', 'delete', id)
+  enqueueCategorySyncEvent(id, 'delete')
+    .then(() => triggerSync())
+    .catch(() => { /* swallow — local DB is source of truth */ })
 }
 
 function mapRow(row: Record<string, unknown>): Category {
@@ -120,6 +132,67 @@ function mapRow(row: Record<string, unknown>): Category {
     isActive: Boolean(row.is_active),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  }
+}
+
+async function enqueueCategorySyncEvent(
+  categoryId: string,
+  operation: 'create' | 'update' | 'delete',
+): Promise<void> {
+  const db = await getDb()
+  const businessId = await getCurrentShopId()
+  if (!businessId) return
+  if (operation !== 'delete') {
+    const row = await db.getFirstAsync<Record<string, unknown>>(
+      'SELECT * FROM categories WHERE id = ?', [categoryId],
+    )
+    if (!row) return
+    const entity = fromLocalCategory(row)
+    await defaultSyncEngine.enqueue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      id: generateId() as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      idempotencyKey: ((entity as { idempotencyKey?: string }).idempotencyKey ?? categoryId) as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      businessId: String(entity.businessId) as any,
+      entityKind: 'category',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      entityId: String(entity.id) as any,
+      operation,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      originatingDeviceId: String(entity.businessId) as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      originatingEmployeeId: 'system' as any,
+      clientSequence: Date.now(),
+      clientCreatedAt: entity.updatedAt,
+      entityVersion: entity.version,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      payload: entity as any,
+      state: 'pending',
+    })
+  } else {
+    await defaultSyncEngine.enqueue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      id: generateId() as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      idempotencyKey: categoryId as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      businessId: businessId as any,
+      entityKind: 'category',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      entityId: categoryId as any,
+      operation: 'delete',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      originatingDeviceId: businessId as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      originatingEmployeeId: 'system' as any,
+      clientSequence: Date.now(),
+      clientCreatedAt: new Date().toISOString(),
+      entityVersion: 1,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      payload: { id: categoryId } as any,
+      state: 'pending',
+    })
   }
 }
 

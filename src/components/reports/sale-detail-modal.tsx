@@ -1,9 +1,9 @@
 // SaleDetailModal — full receipt view for a single sale transaction
-// Pure presentation: no business logic, no API calls.
+// Phase 10: added RefundModal integration
 
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, Alert, StyleSheet } from 'react-native'
-import { X, Printer, Share2 } from 'lucide-react-native'
+import { X, Printer, Share2, RotateCcw } from 'lucide-react-native'
 import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import { useTheme } from '../../hooks/useTheme'
@@ -13,6 +13,7 @@ import { getShopSettings } from '../../services/db-settings'
 import { SaleMetaCard } from './sale-meta-card'
 import { SaleItemsCard } from './sale-items-card'
 import { SaleTotalsCard } from './sale-totals-card'
+import { RefundModal } from './refund-modal'
 
 interface Props {
   sale: Sale | null
@@ -24,6 +25,7 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
   const { bg, text, border, brand } = useTheme()
   const [printing, setPrinting] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [showRefund, setShowRefund] = useState(false)
 
   if (!sale) return null
 
@@ -83,7 +85,6 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
         <View style={[styles.header, { borderBottomColor: border }]}>
           <Text style={[styles.title, { color: text }]}>Sale Details</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-
             <X size={20} color={text} />
           </TouchableOpacity>
         </View>
@@ -101,24 +102,42 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
             onPress={handleShare}
             disabled={sharing}
           >
-
             <Share2 size={16} color={text} />
             <Text style={[styles.actionBtnText, { color: text }]}>
               {sharing ? 'Sharing...' : 'Share'}
             </Text>
           </TouchableOpacity>
+          {sale.status === 'completed' && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B' }]}
+              onPress={() => setShowRefund(true)}
+            >
+              <RotateCcw size={16} color="#F59E0B" />
+              <Text style={[styles.actionBtnText, { color: '#F59E0B' }]}>Refund</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: brand }]}
             onPress={handlePrint}
             disabled={printing}
           >
-
             <Printer size={16} color="#fff" />
             <Text style={[styles.actionBtnText, { color: '#fff' }]}>
               {printing ? 'Printing...' : 'Print'}
             </Text>
           </TouchableOpacity>
         </View>
+
+        <RefundModal
+          sale={sale}
+          visible={showRefund}
+          onClose={() => setShowRefund(false)}
+          onRefundComplete={(refundId) => {
+            setShowRefund(false)
+            Alert.alert('Refund Issued', `Refund ${refundId.slice(0, 8)}… completed. Stock has been restored.`)
+            onClose()
+          }}
+        />
       </View>
     </Modal>
   )

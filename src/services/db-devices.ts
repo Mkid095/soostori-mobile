@@ -1,11 +1,31 @@
-// Device CRUD — desktop-agent
+// db-devices.ts — Phase 15: Re-exports + legacy helpers
+// Phase 15 canonical service: db-devices-phase15.ts
+// Legacy helpers below (preserve existing API for desktop-agent compatibility)
 import { getDb } from '../lib/db'
 import type { Device, DeviceType } from '../lib/sync-protocol'
 import { generateId } from '../lib/formatters'
 import { enforcePermission, PERMISSIONS } from './sdk-bridge/rbac'
 import { getCurrentRole } from './session-helper'
 
-function mapRow(row: Record<string, unknown>): Device {
+// Re-export Phase 15 canonical service
+export {
+  enrollDevice,
+  listDevices,
+  approveDevice,
+  revokeDevice,
+  transferPrimary,
+  getPrimaryStatus,
+} from './db-devices-phase15'
+export type { DeviceRow, DeviceStatus } from './db-devices-phase15'
+
+// ── Legacy helpers (preserve existing API for desktop-agent) ─────────────────
+
+export async function getDeviceById(id: string): Promise<Device | null> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM devices WHERE id = ?', [id]
+  )
+  if (!row) return null
   return {
     id: String(row.id),
     shopId: String(row.shop_id),
@@ -19,14 +39,6 @@ function mapRow(row: Record<string, unknown>): Device {
   }
 }
 
-export async function getDeviceById(id: string): Promise<Device | null> {
-  const db = await getDb()
-  const row = await db.getFirstAsync<Record<string, unknown>>(
-    'SELECT * FROM devices WHERE id = ?', [id]
-  )
-  return row ? mapRow(row) : null
-}
-
 export async function getDeviceByShopAndType(
   shopId: string,
   deviceType: DeviceType,
@@ -36,7 +48,18 @@ export async function getDeviceByShopAndType(
     'SELECT * FROM devices WHERE shop_id = ? AND device_type = ?',
     [shopId, deviceType]
   )
-  return row ? mapRow(row) : null
+  if (!row) return null
+  return {
+    id: String(row.id),
+    shopId: String(row.shop_id),
+    employeeId: row.employee_id ? String(row.employee_id) : undefined,
+    deviceName: row.device_name ? String(row.device_name) : undefined,
+    deviceType: (String(row.device_type) || 'mobile') as DeviceType,
+    isHost: Boolean(row.is_host),
+    lastSeen: row.last_seen ? String(row.last_seen) : undefined,
+    capabilities: row.capabilities ? String(row.capabilities) : undefined,
+    createdAt: String(row.created_at),
+  }
 }
 
 export async function registerDevice(
@@ -71,13 +94,4 @@ export async function setDeviceHost(id: string, isHost: boolean): Promise<void> 
 export async function assignDeviceToEmployee(deviceId: string, employeeId: string): Promise<void> {
   const db = await getDb()
   await db.runAsync('UPDATE devices SET employee_id = ? WHERE id = ?', [employeeId, deviceId])
-}
-
-export async function listDevices(shopId: string): Promise<Device[]> {
-  const db = await getDb()
-  const rows = await db.getAllAsync<Record<string, unknown>>(
-    'SELECT * FROM devices WHERE shop_id = ? ORDER BY created_at DESC',
-    [shopId]
-  )
-  return rows.map(mapRow)
 }

@@ -7,7 +7,7 @@ import { seedExpenseCategories } from './db-expense-seed'
 import { generateId } from './formatters'
 
 const DEFAULT_SHOP_ID = 'shop-default'
-const CURRENT_SCHEMA_VERSION = 2
+const CURRENT_SCHEMA_VERSION = 4
 
 let db: SQLite.SQLiteDatabase | null = null
 
@@ -68,6 +68,24 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
     await addColumnIfNotExists(database, 'shops', 'is_cloud_shop', 'INTEGER DEFAULT 0')
     await database.runAsync(`INSERT OR IGNORE INTO sync_state (id, shop_id) VALUES ('default', 'shop-default')`)
     await setSchemaVersion(database, 2)
+  }
+
+  if (currentVersion < 3) {
+    // Version 3: Phase 12 — expense status workflow (pending | approved | paid) + paid_at
+    await addColumnIfNotExists(database, 'expenses', 'status', "TEXT DEFAULT 'pending'")
+    await addColumnIfNotExists(database, 'expenses', 'paid_at', 'TEXT')
+    await addColumnIfNotExists(database, 'expenses', 'vendor', 'TEXT')
+    await addColumnIfNotExists(database, 'expenses', 'created_by', 'TEXT')
+    await database.runAsync(
+      `UPDATE expenses SET status = 'paid' WHERE paid_at IS NOT NULL OR paid_at != ''`)
+    await setSchemaVersion(database, 3)
+  }
+
+  if (currentVersion < 4) {
+    // Version 4: Phase 15 — devices status + is_primary columns
+    await addColumnIfNotExists(database, 'devices', 'status', "TEXT DEFAULT 'pending'")
+    await addColumnIfNotExists(database, 'devices', 'is_primary', 'INTEGER DEFAULT 0')
+    await setSchemaVersion(database, 4)
   }
 
   // Future migrations go here:

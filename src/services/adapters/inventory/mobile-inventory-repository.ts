@@ -1,136 +1,103 @@
 /**
  * MobileInventoryRepository — implements @soostori/inventory.InventoryRepository.
  *
- * Phase 11.3 (Mobile Commerce) — wraps db-inventory-transactions behind the
- * published SDK ledger contract. Mobile-specific cross-cutting
- * (queueSync, audit) lives in db-inventory-transactions; this adapter
- * surfaces only the canonical contract.
+ * Phase 09 — Full offline sale transaction:
+ *   Cart → Sale → SaleItems → inventory deduction via stock ledger
+ *   → idempotent sync event → replay-safe.
+ *
+ * File split:
+ *   inventory-movement-repo.ts  — movement read/write + rowToMovement
+ *   inventory-balance-repo.ts   — balance cache + summary
+ *   inventory-reservation-repo.ts (inline below) — reservation CRUD
  */
 
-import type { UUID } from '@soostori/core'
+import type { UUID, ISO8601 } from '@soostori/core'
 import type {
-  InventoryRepository,
-  StockMovement,
-  StockBalance,
-  StockSummary,
-  StockMovementType,
-  StockReservation,
-  MovementFilter,
-  PaginationOptions,
+  InventoryRepository, StockMovement, StockBalance,
+  StockSummary, StockReservation, MovementFilter, PaginationOptions,
 } from '@soostori/inventory'
+import { getStockBalance, upsertStockBalance, getStockSummary } from './inventory-balance-repo'
+import { getMovement, listMovements, appendMovement, hasMovementByKey, getLatestMovement } from './inventory-movement-repo'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-let __testDb: unknown = undefined
-export function __setMobileInventoryRepositoryDbForTesting(db: unknown): void {
-  __testDb = db
-}
-async function loadDb(): Promise<unknown> {
-  if (__testDb !== undefined) return __testDb
-  return await import('../../db-inventory-transactions')
+// ── Reservation helpers (inline to avoid another file) ────────────────────────
+
+async function createReservation(r: StockReservation): Promise<void> {
+  const { getDb } = await import('../../../lib/db')
+  const db = await getDb()
+  await db.runAsync(
+    `INSERT OR REPLACE INTO stock_reservations
+       (id, sale_id, product_id, quantity, status, expires_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [r.id, r.saleId, r.productId, r.quantity, r.status, r.expiresAt, r.createdAt],
+  )
 }
 
-function normalizeType(raw: string): StockMovementType {
-  const allowed: StockMovementType[] = ['received', 'sold', 'refunded', 'returned', 'adjusted', 'transferred', 'reserved', 'released']
-  if ((allowed as string[]).includes(raw)) return raw as StockMovementType
-  return 'adjusted'
-}
-
-function rowToMovement(row: Record<string, unknown>): StockMovement {
+async function getReservation(id: UUID): Promise<StockReservation | null> {
+  const { getDb } = await import('../../../lib/db')
+  const db = await getDb()
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM stock_reservations WHERE id = ?', [id],
+  )
+  if (!row) return null
   return {
-    id: row.id as UUID,
-    shopId: (row.shop_id ?? '') as UUID,
-    productId: row.product_id as UUID,
-    productVariantId: null,
-    type: normalizeType(String(row.event_type ?? 'adjusted')),
-    quantity: Number(row.quantity ?? 0),
-    balanceAfter: Number(row.balance_after ?? 0),
-    referenceId: null,
-    referenceType: null,
-    reason: row.reason as string | null,
-    actorType: 'employee',
-    actorId: (row.user_id as UUID) ?? null,
-    deviceId: (row.device_id as UUID) ?? ('' as UUID),
-    timestamp: String(row.created_at ?? new Date().toISOString()) as never,
-    sequence: Number(row.sequence_number ?? 0),
-    idempotencyKey: ((row.idempotency_key as string) ?? String(row.id)) as UUID,
-    syncedAt: null,
+    id: row.id as UUID, saleId: row.sale_id as UUID, productId: row.product_id as UUID,
+    quantity: Number(row.quantity),
+    status: (row.status as StockReservation['status']) ?? 'active',
+    expiresAt: String(row.expires_at) as ISO8601, createdAt: String(row.created_at) as ISO8601,
   }
 }
+
+async function getReservationsBySale(saleId: UUID): Promise<StockReservation[]> {
+  const { getDb } = await import('../../../lib/db')
+  const db = await getDb()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM stock_reservations WHERE sale_id = ?', [saleId],
+  )
+  return rows.map(row => ({
+    id: row.id as UUID, saleId: row.sale_id as UUID, productId: row.product_id as UUID,
+    quantity: Number(row.quantity),
+    status: (row.status as StockReservation['status']) ?? 'active',
+    expiresAt: String(row.expires_at) as ISO8601, createdAt: String(row.created_at) as ISO8601,
+  }))
+}
+
+// ── MobileInventoryRepository ─────────────────────────────────────────────────
 
 export class MobileInventoryRepository implements InventoryRepository {
-  // ── Movements ────────────────────────────────────────────────────────────
-  async getMovement(id: UUID): Promise<StockMovement | null> {
-    const mod = (await loadDb()) as { recordInventoryTransaction?: unknown }
-    // recordInventoryTransaction is the helper, not a getter; we use raw
-    // query path via a small in-line getter helper if present, else null.
-    void mod
-    return null // Phase 11.5 will wire a singleMovement getter.
+  async getMovement(id: UUID)                  { return getMovement(id) }
+  async listMovements(f?: MovementFilter, p?: PaginationOptions) { return listMovements(f, p) }
+  async appendMovement(m: StockMovement)       { return appendMovement(m) }
+  async hasMovementByKey(k: UUID)              { return hasMovementByKey(k) }
+  async getLatestMovement(p: UUID)              { return getLatestMovement(p) }
+  async getStockSummary(s: UUID, p: UUID)      { return getStockSummary(s, p) }
+  async getBalance(p: UUID)                    { return getStockBalance(p) }
+  async upsertBalance(b: StockBalance)         { return upsertStockBalance(b.productId, b.shopId, b.quantity, b.reservedQuantity, b.lastSequence) }
+  async createReservation(r: StockReservation) { return createReservation(r) }
+  async getReservation(id: UUID)               { return getReservation(id) }
+  async getReservationsBySale(s: UUID)         { return getReservationsBySale(s) }
+
+  async updateReservationStatus(id: UUID, status: StockReservation['status']): Promise<void> {
+    const { getDb } = await import('../../../lib/db')
+    const db = await getDb()
+    await db.runAsync('UPDATE stock_reservations SET status = ? WHERE id = ?', [status, id])
   }
 
-  async listMovements(filter?: MovementFilter, pagination?: PaginationOptions): Promise<StockMovement[]> {
-    const mod = (await loadDb()) as {
-      getInventoryHistory?: (productId: string) => Promise<Array<Record<string, unknown>>>
-      recordInventoryTransaction?: unknown
-    }
-    void mod; void filter; void pagination
-    return []
+  async getActiveReservations(productId: UUID): Promise<StockReservation[]> {
+    const { getDb } = await import('../../../lib/db')
+    const db = await getDb()
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT * FROM stock_reservations WHERE product_id = ? AND status = 'active' AND expires_at > ?`,
+      [productId, new Date().toISOString()],
+    )
+    return rows.map(row => ({
+      id: row.id as UUID, saleId: row.sale_id as UUID, productId: row.product_id as UUID,
+      quantity: Number(row.quantity),
+      status: (row.status as StockReservation['status']) ?? 'active',
+      expiresAt: String(row.expires_at) as ISO8601, createdAt: String(row.created_at) as ISO8601,
+    }))
   }
-
-  async appendMovement(movement: StockMovement): Promise<void> {
-    const mod = (await loadDb()) as {
-      recordInventoryTransaction?: (entry: Record<string, unknown>) => Promise<unknown>
-    }
-    if (typeof mod.recordInventoryTransaction === 'function') {
-      await mod.recordInventoryTransaction({
-        id: movement.id,
-        shop_id: movement.shopId,
-        product_id: movement.productId,
-        device_id: movement.deviceId ?? '',
-        user_id: movement.actorId ?? '',
-        event_type: movement.type,
-        quantity: movement.quantity,
-        balance_after: movement.balanceAfter,
-        idempotency_key: movement.idempotencyKey,
-        sequence_number: movement.sequence,
-        reason: movement.reason ?? '',
-      })
-    }
-  }
-
-  async hasMovementByKey(idempotencyKey: UUID): Promise<boolean> {
-    const mod = (await loadDb()) as {
-      hasMovementByKey?: (k: string) => Promise<boolean>
-    }
-    if (typeof mod.hasMovementByKey === 'function') {
-      return mod.hasMovementByKey(idempotencyKey as string)
-    }
-    return false
-  }
-
-  async getLatestMovement(_productId: UUID): Promise<StockMovement | null> {
-    return null // Phase 11.5 will wire a latestMovement getter.
-  }
-
-  // ── Stock summaries / balances ───────────────────────────────────────────
-  async getStockSummary(_shopId: UUID, _productId: UUID): Promise<StockSummary | null> {
-    return null // Phase 11.5 — wire to db-inventory-transactions aggregates.
-  }
-
-  async getBalance(_productId: UUID): Promise<StockBalance | null> {
-    return null // Phase 11.5 — derive from products.current_stock.
-  }
-
-  async upsertBalance(_balance: StockBalance): Promise<void> {
-    // Phase 11.5 — write back to products.current_stock via db-products.
-  }
-
-  // ── Reservations: defer; Mobile does not maintain a reservation table.
-  async createReservation(_r: StockReservation): Promise<void> { /* Phase 11.5 */ }
-  async getReservation(_id: UUID): Promise<StockReservation | null> { return null }
-  async getReservationsBySale(_saleId: UUID): Promise<StockReservation[]> { return [] }
-  async updateReservationStatus(_id: UUID, _status: StockReservation['status']): Promise<void> { /* Phase 11.5 */ }
-  async getActiveReservations(_productId: UUID): Promise<StockReservation[]> { return [] }
 }
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

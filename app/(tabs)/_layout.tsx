@@ -24,6 +24,12 @@ export default function TabsLayout() {
         <Tabs.Screen name="dashboard" />
         <Tabs.Screen name="approvals" />
 
+        {/* ── Phase 14 — Team tab (team.view gate) */}
+        <Tabs.Screen name="team" />
+
+        {/* ── Phase 15 — Devices tab (devices.view gate) */}
+        <Tabs.Screen name="devices" />
+
         {/* ── Shared / existing tabs */}
         <Tabs.Screen name="pos" />
         <Tabs.Screen name="inventory" />

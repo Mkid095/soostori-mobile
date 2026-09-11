@@ -1,8 +1,10 @@
 // app/(tabs)/customers.tsx — Search and add customers
 // Uses the canonical db-customers service.
-import { useState, useEffect, useCallback } from 'react'
+// Phase 11: tap customer → navigate to detail screen.
+import { useState, useEffect, useCallback, type ListRenderItemInfo } from 'react'
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import { Search, UserPlus, Phone, X } from 'lucide-react-native'
 import type { Customer } from '../../src/lib/types'
 import { getAllCustomers, searchCustomers, createCustomer } from '../../src/services/db-customers'
@@ -11,6 +13,7 @@ import { AppHeader } from '../../src/components/shared/app-header'
 
 export default function CustomersScreen() {
   const { bg, card, text, textSecondary: textMuted, border, brand } = useTheme()
+  const router = useRouter()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [query, setQuery] = useState('')
   const [showAdd, setShowAdd] = useState(false)
@@ -65,15 +68,19 @@ export default function CustomersScreen() {
 
       <FlatList
         data={customers}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: Customer) => item.id}
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
-        renderItem={({ item }) => (
-          <View style={{ backgroundColor: card, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: border, flexDirection: 'row', alignItems: 'center' }}>
+        renderItem={({ item }: ListRenderItemInfo<Customer>) => (
+          <TouchableOpacity
+            style={{ backgroundColor: card, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: border, flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => { router.push({ pathname: '/customers/[id]', params: { id: item.id } } as any) }}
+            activeOpacity={0.7}
+          >
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: '700', color: text, fontSize: 15 }}>{item.name}</Text>
               {item.phone && <Text style={{ color: textMuted, fontSize: 13, marginTop: 2 }}>{item.phone}</Text>}
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={<View style={{ padding: 40, alignItems: 'center' }}><Text style={{ color: textMuted }}>No customers found</Text></View>}
       />

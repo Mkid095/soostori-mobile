@@ -23,6 +23,7 @@ export function ExpenseFormModal({ expense, categories, visible, onClose, onSave
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '')
   const [desc, setDesc] = useState(expense?.description ?? '')
   const [ref, setRef] = useState(expense?.reference ?? '')
+  const [vendor, setVendor] = useState(expense?.vendor ?? '')
   const [date, setDate] = useState(expense?.date ?? new Date().toISOString().split('T')[0])
   const [saving, setSaving] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
@@ -34,9 +35,9 @@ export function ExpenseFormModal({ expense, categories, visible, onClose, onSave
     setSaving(true)
     try {
       if (expense?.id) {
-        await updateExpense(expense.id, { categoryId: catId, amount: amt, description: desc.trim() || undefined, reference: ref.trim() || undefined, date })
+        await updateExpense(expense.id, { categoryId: catId, amount: amt, description: desc.trim() || undefined, reference: ref.trim() || undefined, vendor: vendor.trim() || undefined, date })
       } else {
-        await createExpense({ categoryId: catId, amount: amt, description: desc.trim() || undefined, reference: ref.trim() || undefined, date })
+        await createExpense({ categoryId: catId, amount: amt, description: desc.trim() || undefined, reference: ref.trim() || undefined, vendor: vendor.trim() || undefined, date })
       }
       onSaved()
       onClose()
@@ -90,6 +91,11 @@ export function ExpenseFormModal({ expense, categories, visible, onClose, onSave
             <TextInput style={[s.input, { backgroundColor: bg, color: text, borderColor: border }]}
               placeholder="Optional" placeholderTextColor="#94A3B8"
               value={ref} onChangeText={setRef} />
+
+            <Text style={[s.label, { color: text }]}>Vendor / Supplier</Text>
+            <TextInput style={[s.input, { backgroundColor: bg, color: text, borderColor: border }]}
+              placeholder="Optional" placeholderTextColor="#94A3B8"
+              value={vendor} onChangeText={setVendor} />
           </ScrollView>
 
           <TouchableOpacity style={[s.saveBtn, { backgroundColor: brand }]} onPress={handleSave} disabled={saving}>

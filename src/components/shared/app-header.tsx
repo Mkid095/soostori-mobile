@@ -1,7 +1,7 @@
 // Custom app-wide header — replaces expo-router default headers on all pages
 // Contains shop name (left) + quick actions: sync, dark/light toggle, bell, settings (right)
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Sun, Moon, Settings, Database, RefreshCw, Building2, ChevronRight } from 'lucide-react-native'
@@ -17,9 +17,10 @@ interface Props {
   showBell?: boolean
   showSettings?: boolean
   onBusinessSwitch?: () => void
+  rightAction?: ReactNode
 }
 
-export function AppHeader({ title, showSync = true, showToggle = true, showBell = false, showSettings = true, onBusinessSwitch }: Props) {
+export function AppHeader({ title, showSync = true, showToggle = true, showBell = false, showSettings = true, onBusinessSwitch, rightAction }: Props) {
   const { bg, text, border, brand } = useTheme()
   const { effectiveScheme, toggleScheme } = useAppTheme()
   const router = useRouter()
@@ -66,6 +67,8 @@ export function AppHeader({ title, showSync = true, showToggle = true, showBell 
         )}
       </View>
 
+      {rightAction && <View style={s.rightAction}>{rightAction}</View>}
+
       <View style={s.right}>
         {showSync && (
           <TouchableOpacity style={s.iconBtn} onPress={handleSyncTap} activeOpacity={0.7}>
@@ -102,6 +105,7 @@ export function AppHeader({ title, showSync = true, showToggle = true, showBell 
 const s = StyleSheet.create({
   container: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, minHeight: 52 },
   left: { flex: 1, minWidth: 0 },
+  rightAction: { marginRight: 8 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: { fontSize: 17, fontWeight: '800' },
   businessName: { fontSize: 15, fontWeight: '700' },

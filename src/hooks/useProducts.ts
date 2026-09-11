@@ -1,8 +1,9 @@
-// React Query hooks for products.
+// useProducts.ts — React Query hooks for products.
 // Wraps the db-products service so screens never call the database directly.
 
-import { useQuery } from '@tanstack/react-query'
-import { getAllProducts, searchProducts } from '../services/db-products'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getAllProducts, searchProducts, getLowStockProducts } from '../services/db-products'
 import type { Product } from '../lib/types'
 
 export function useProducts(search?: string) {
@@ -11,4 +12,18 @@ export function useProducts(search?: string) {
     queryKey: trimmed ? ['products', 'search', trimmed] : ['products', 'all'],
     queryFn: () => (trimmed ? searchProducts(trimmed) : getAllProducts()),
   })
+}
+
+export function useLowStockHook() {
+  return useQuery<Product[]>({
+    queryKey: ['products', 'low-stock'],
+    queryFn: getLowStockProducts,
+  })
+}
+
+export function useProductsRefresh() {
+  const qc = useQueryClient()
+  return useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['products'] })
+  }, [qc])
 }

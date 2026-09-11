@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, Text } from 'react-native'
 import { useRouter, usePathname } from 'expo-router'
-import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X, DollarSign } from 'lucide-react-native'
+import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X, DollarSign, Package as PackageIcon, Users as UsersIcon, Smartphone } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAppTheme } from '../../hooks/useTheme'
@@ -54,18 +54,44 @@ const COMMISSION_TAB: TabDef = {
   icon: (a, c) => <DollarSign size={22} color={c} />,
 }
 
+// Phase 08 — Products tab (inventory.view capability gate)
+const PRODUCTS_TAB: TabDef = {
+  key: 'products',
+  label: 'Products',
+  href: '/(tabs)/products',
+  icon: (a, c) => <PackageIcon size={22} color={c} />,
+}
+
+// Phase 14 — Team tab (team.view capability gate)
+const TEAM_TAB: TabDef = {
+  key: 'team',
+  label: 'Team',
+  href: '/(tabs)/team',
+  icon: (a, c) => <UsersIcon size={22} color={c} />,
+}
+
+// Phase 15 — Devices tab (devices.view capability gate)
+const DEVICES_TAB: TabDef = {
+  key: 'devices',
+  label: 'Devices',
+  href: '/(tabs)/devices',
+  icon: (a, c) => <Smartphone size={22} color={c} />,
+}
+
 // Phase 04 coarse-capability constants — must match sdk-bridge/rbac.ts PERMISSIONS
 const CAP = {
   INVENTORY_VIEW: 'inventory.view',
   REPORTS_VIEW:   'reports.view',
   TEAM_VIEW:      'team.view',
+  DEVICES_VIEW:   'devices.view',
 } as const
 
 // Maps capabilities → tabs that require them
 const CAPABILITY_TABS: Record<string, TabDef[]> = {
-  [CAP.INVENTORY_VIEW]: INVENTORY_TABS,
+  [CAP.INVENTORY_VIEW]: [...INVENTORY_TABS, PRODUCTS_TAB],
   [CAP.REPORTS_VIEW]:   MANAGER_TABS,
-  [CAP.TEAM_VIEW]:     [COMMISSION_TAB],
+  [CAP.TEAM_VIEW]:     [COMMISSION_TAB, TEAM_TAB],
+  [CAP.DEVICES_VIEW]:  [DEVICES_TAB],
 }
 
 const ICON_SIZE = 22
@@ -102,10 +128,10 @@ export function BottomTabBar() {
 
     if (role === 'owner') {
       // owner has everything
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
     }
     if (role === 'manager') {
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, 'pos.sell', 'team.manage'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, 'pos.sell', 'team.manage'])
     }
     if (role === 'attendant') {
       return new Set([CAP.INVENTORY_VIEW])
@@ -118,6 +144,7 @@ export function BottomTabBar() {
     // Phase 04: add tabs based on capabilities, not role strings
     if (capabilities.has(CAP.INVENTORY_VIEW)) tabs.push(...INVENTORY_TABS)
     if (capabilities.has(CAP.REPORTS_VIEW))   tabs.push(...MANAGER_TABS)
+    if (capabilities.has(CAP.DEVICES_VIEW)) tabs.push(DEVICES_TAB)
     return tabs
   }
 

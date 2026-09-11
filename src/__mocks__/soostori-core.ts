@@ -38,3 +38,6 @@ exports.MOBILE_OFFLINE_GRACE_DAYS = 2
 exports.UNAUTHORIZED_LOGIN_CONTACT_PHONE = '+15555550100'
 exports.SubscriptionGateError = class SubscriptionGateError extends Error {}
 exports.AuthError = class AuthError extends Error {}
+exports.SoostoriError = class SoostoriError extends Error {
+  constructor(public code: string, message: string) { super(message) }
+}

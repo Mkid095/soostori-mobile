@@ -67,12 +67,16 @@ async function createInventorySchema(db: SQLite.SQLiteDatabase) {
       id TEXT PRIMARY KEY, customer_id TEXT, customer_name TEXT, customer_phone TEXT,
       sale_id TEXT, amount REAL NOT NULL, amount_paid REAL DEFAULT 0,
       status TEXT DEFAULT 'pending', due_date TEXT, notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
+      business_id TEXT,
+      idempotency_key TEXT
     );
     CREATE TABLE IF NOT EXISTS debt_payments (
       id TEXT PRIMARY KEY, debt_id TEXT NOT NULL, amount REAL NOT NULL,
       payment_method TEXT NOT NULL, reference TEXT, notes TEXT,
       created_at TEXT DEFAULT (datetime('now')),
+      business_id TEXT, employee_id TEXT,
+      idempotency_key TEXT,
       FOREIGN KEY (debt_id) REFERENCES debts(id)
     );
   `)

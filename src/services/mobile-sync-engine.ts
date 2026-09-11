@@ -200,6 +200,9 @@ export async function apply(
   if (event.entityKind === 'sale') {
     return applySaleEvent(database, event)
   }
+  if (event.entityKind === 'customer') {
+    return applyCustomerEvent(database, event)
+  }
 
   return { state: 'no_op' }
 }
@@ -275,12 +278,64 @@ function applySaleEvent(
         Number(p.paidAmount ?? p.totalAmount ?? 0),
         String(p.paymentMethod ?? 'cash'),
         p.note != null ? String(p.note) : null,
+        // customer_id_number: sale references customer by id_number (plain text),
+        // not by FK. This means the sale is valid even if the customer hasn't synced yet.
         p.customerId != null ? String(p.customerId) : null,
         itemsJson,
         `${Array.isArray(p.items) ? p.items.length : 0} items`,
         String(p.createdAt ?? event.clientCreatedAt),
         String(p.updatedAt ?? event.clientCreatedAt),
       ],
+    )
+    return { state: 'applied', entityVersion: event.entityVersion }
+  }
+
+  return { state: 'no_op' }
+}
+
+// ── Customer replay ───────────────────────────────────────────────────────────
+
+/**
+ * applyCustomerEvent — replay a cloud customer event to local SQLite.
+ *
+ * Idempotency (Phase 10 critical invariant):
+ *   - idempotencyKey = customer.id
+ *   - INSERT OR REPLACE means a replay of an already-applied event
+ *     (same idempotencyKey) overwrites with identical data — no new row,
+ *     no duplicate.
+ *   - Tombstone sets is_active = 0 (soft delete — preserve referential integrity
+ *     for any sales that reference this customer by id_number).
+ */
+function applyCustomerEvent(
+  database: Awaited<ReturnType<typeof getDb>>,
+  event: SyncEvent,
+): SyncApplyResult {
+  const p = event.payload as Record<string, unknown>
+
+  if (event.operation === 'create' || event.operation === 'update') {
+    database.runAsync(
+      `INSERT OR REPLACE INTO customers
+         (id, name, phone, id_number, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        event.entityId,
+        String(p.name ?? ''),
+        p.phone != null ? String(p.phone) : null,
+        p.idNumber != null ? String(p.idNumber) : null,
+        // Canonical Customer.status = 'inactive' | 'blacklisted' → is_active = 0
+        p.status === 'inactive' || p.status === 'blacklisted' ? 0 : 1,
+        String(p.createdAt ?? event.clientCreatedAt),
+        String(p.updatedAt ?? event.clientCreatedAt),
+      ],
+    )
+    return { state: 'applied', entityVersion: event.entityVersion }
+  }
+
+  if (event.operation === 'tombstone' || event.operation === 'delete') {
+    // Soft-delete to preserve sale references
+    database.runAsync(
+      `UPDATE customers SET is_active = 0, updated_at = ? WHERE id = ?`,
+      [new Date().toISOString(), event.entityId],
     )
     return { state: 'applied', entityVersion: event.entityVersion }
   }

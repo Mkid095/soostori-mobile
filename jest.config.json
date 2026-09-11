@@ -13,10 +13,15 @@
     "^react-native$": "<rootDir>/src/__mocks__/react-native.ts",
     "^expo-secure-store$": "<rootDir>/src/__mocks__/expo-secure-store.ts",
     "^expo-router$": "<rootDir>/src/__mocks__/expo-router.ts",
+    "^@react-native-community/netinfo$": "<rootDir>/src/__mocks__/netinfo.ts",
     "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/async-storage.ts",
     "^@fidscript/instant-react$": "<rootDir>/src/__mocks__/fidscript-instant-react.ts",
+    "^@soostori/auth$": "<rootDir>/src/__mocks__/soostori-auth.ts",
+    "^@soostori/subscription$": "<rootDir>/src/__mocks__/soostori-subscription.ts",
     "^@soostori/core$": "<rootDir>/src/__mocks__/soostori-core.ts",
     "^@soostori/contracts$": "<rootDir>/src/__mocks__/soostori-contracts.ts",
+    "^@soostori/events$": "<rootDir>/src/__mocks__/soostori-events.ts",
+    "^@soostori/inventory$": "<rootDir>/src/__mocks__/soostori-inventory.ts",
     ".*/lib/db$": "<rootDir>/src/__mocks__/db.ts"
   }
 }

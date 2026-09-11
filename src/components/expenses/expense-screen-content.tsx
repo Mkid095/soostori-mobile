@@ -1,8 +1,10 @@
 // ExpenseScreenContent — the scrollable body of the Expenses screen.
 // Pure presentation: receives data via props, emits events.
+// Phase 12: navigate to expense detail on tap.
 
 import { useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { router } from 'expo-router'
 import { Plus, Receipt } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Expense, ExpenseCategory } from '../../lib/types'
@@ -50,15 +52,7 @@ export function ExpenseScreenContent({ year, month, monthlyTotal, allExpenses, i
   const monthLabel = `${MONTHS[month - 1]} ${year}`
 
   function handleExpensePress(exp: Expense) {
-    Alert.alert(
-      exp.description || exp.categoryName || 'Expense',
-      `${formatCurrency(exp.amount)}\n${formatDate(exp.date)}${exp.reference ? `\nRef: ${exp.reference}` : ''}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Edit', onPress: () => { setEditExpense(exp); setShowForm(true) } },
-        { text: 'Delete', style: 'destructive', onPress: async () => { await deleteExpense(exp.id); onRefresh() } },
-      ]
-    )
+    router.push(`/expenses/${exp.id}` as any)
   }
 
   return (
@@ -87,7 +81,7 @@ export function ExpenseScreenContent({ year, month, monthlyTotal, allExpenses, i
           <View>
             <Text style={[s.dateHeader, { color: text }]}>{formatDate(date)}</Text>
             {exps.map((exp: Expense) => (
-              <ExpenseRow key={exp.id} expense={exp} onPress={handleExpensePress} />
+              <ExpenseRow expense={exp} onPress={handleExpensePress} />
             ))}
           </View>
         )}

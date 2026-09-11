@@ -120,6 +120,10 @@ export interface Expense {
   description?: string
   reference?: string
   date: string
+  status: 'pending' | 'approved' | 'paid'
+  paidAt?: string
+  vendor?: string
+  createdBy?: string
   createdAt: string
   updatedAt: string
 }

@@ -43,6 +43,9 @@ export async function initTeamSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       device_name TEXT,
       device_type TEXT NOT NULL DEFAULT 'mobile',
       is_host INTEGER DEFAULT 0,
+      -- Phase 15: status + is_primary for canonical device management
+      status TEXT NOT NULL DEFAULT 'pending',
+      is_primary INTEGER DEFAULT 0,
       last_seen TEXT,
       capabilities TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -135,5 +138,33 @@ export async function initTeamSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       is_runtime_compatible INTEGER DEFAULT 1,
       downloaded_at TEXT
     );
+
+    -- Phase 14: Team management
+    CREATE TABLE IF NOT EXISTS team_invitations (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      invited_by_employee_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'attendant',
+      status TEXT NOT NULL DEFAULT 'pending',
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS team_memberships (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      person_id TEXT,
+      employee_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'attendant',
+      permissions_json TEXT,
+      joined_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_team_invitations_business ON team_invitations(business_id, status);
+    CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON team_invitations(email);
+    CREATE INDEX IF NOT EXISTS idx_team_memberships_business ON team_memberships(business_id);
+    CREATE INDEX IF NOT EXISTS idx_team_memberships_employee ON team_memberships(employee_id);
   `)
 }

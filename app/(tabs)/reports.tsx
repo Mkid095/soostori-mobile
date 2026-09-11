@@ -1,136 +1,265 @@
-// Reports page — sales analytics with stats, filters, charts, and sale detail modal
-// Business logic in services; UI components are pure presentation.
+// app/(tabs)/reports.tsx — Phase 13: Reports hub with KPI dashboard
+// All data from LOCAL SQLite — no cloud mutations needed.
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native'
+import React from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Receipt, Download } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
+import {
+  TrendingUp, Package, Users, Receipt,
+  ArrowRight, WifiOff, Cloud,
+  AlertTriangle, Clock,
+} from 'lucide-react-native'
+import {
+  getTodaySalesSummary,
+  getStockIndicators,
+  getDebtIndicators,
+  getSyncReportContext,
+  type TodaySalesSummary,
+  type StockIndicators,
+  type DebtIndicators,
+  type SyncReportContext,
+} from '../../src/services/db-reports'
+import { formatCurrency } from '../../src/lib/formatters'
 import { useTheme } from '../../src/hooks/useTheme'
-import type { Sale } from '../../src/lib/types'
-import { getAllSales, getTodaySales, getWeekSales, getMonthSales } from '../../src/services/db-sales'
-import { getTotalDebtCollected, getDebtCollectedByDateRange } from '../../src/services/db-debts'
-import { formatDate } from '../../src/lib/formatters'
-import { ExportModal } from '../../src/components/reports/export-modal'
-import { SaleDetailModal } from '../../src/components/reports/sale-detail-modal'
-import { SaleRow } from '../../src/components/reports/sale-row'
-import { SimpleBarChart } from '../../src/components/reports/simple-bar-chart'
-import { StatsSection } from '../../src/components/reports/stats-section'
-import { DateFilterRow, PaymentFilterRow } from '../../src/components/reports/filter-row'
 import { AppHeader } from '../../src/components/shared/app-header'
+import { cloudPing } from '../../src/services/cloud-sync-api'
 
-type DateFilter = 'today' | 'week' | 'month' | 'all'
-type PaymentFilter = 'all' | 'cash' | 'mpesa' | 'debt'
+type ReportCardDef = {
+  title: string
+  description: string
+  icon: React.ReactElement
+  color: string
+  route: string
+  badge?: number | string
+}
 
 export default function ReportsScreen() {
-  const { bg, card, text, textSecondary: textMuted, border, brand } = useTheme()
-  const [dateFilter, setDateFilter] = useState<DateFilter>('today')
-  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
-  const [allSales, setAllSales] = useState<Sale[]>([])
-  const [debtCollected, setDebtCollected] = useState(0)
-  const [showExport, setShowExport] = useState(false)
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
-  const [detailVisible, setDetailVisible] = useState(false)
+  const { bg, card: cardBg, text, textSecondary: textMuted, border, brand, success, danger } = useTheme()
+  const router = useRouter()
 
-  const loadSales = useCallback(async () => {
-    let sales: Sale[]
-    if (dateFilter === 'today') sales = await getTodaySales()
-    else if (dateFilter === 'week') sales = await getWeekSales()
-    else if (dateFilter === 'month') sales = await getMonthSales()
-    else sales = await getAllSales()
-    setAllSales(sales)
-  }, [dateFilter])
+  const [sales, setSales] = useState<TodaySalesSummary | null>(null)
+  const [stock, setStock] = useState<StockIndicators | null>(null)
+  const [debt, setDebt] = useState<DebtIndicators | null>(null)
+  const [syncCtx, setSyncCtx] = useState<SyncReportContext | null>(null)
+  const [isOnline, setIsOnline] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const loadDebtCollected = useCallback(async () => {
-    const now = new Date()
-    if (dateFilter === 'today') {
-      const start = new Date(now); start.setHours(0, 0, 0, 0)
-      setDebtCollected(await getDebtCollectedByDateRange(start.toISOString(), now.toISOString()))
-    } else if (dateFilter === 'week') {
-      const diff = (now.getDay() === 0 ? 6 : now.getDay() - 1)
-      const monday = new Date(now); monday.setDate(now.getDate() - diff); monday.setHours(0, 0, 0, 0)
-      setDebtCollected(await getDebtCollectedByDateRange(monday.toISOString(), now.toISOString()))
-    } else if (dateFilter === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-      setDebtCollected(await getDebtCollectedByDateRange(start.toISOString(), now.toISOString()))
-    } else {
-      setDebtCollected(await getTotalDebtCollected())
+  const loadAll = useCallback(async () => {
+    const [s, st, d, ctx] = await Promise.all([
+      getTodaySalesSummary(),
+      getStockIndicators(),
+      getDebtIndicators(),
+      getSyncReportContext(),
+    ])
+    setSales(s)
+    setStock(st)
+    setDebt(d)
+    setSyncCtx(ctx)
+    try {
+      const ping = await cloudPing()
+      setIsOnline(ping.ok)
+    } catch {
+      setIsOnline(false)
     }
-  }, [dateFilter])
+  }, [])
 
-  useEffect(() => { loadSales() }, [loadSales])
-  useEffect(() => { loadDebtCollected() }, [loadDebtCollected])
+  useEffect(() => { loadAll() }, [loadAll])
 
-  const filteredSales = useMemo(() => {
-    if (paymentFilter === 'all') return allSales
-    if (paymentFilter === 'mpesa') return allSales.filter((s) => s.paymentMethod === 'mpesa' || s.paymentMethod === 'mobile_money')
-    return allSales.filter((s) => s.paymentMethod === paymentFilter)
-  }, [allSales, paymentFilter])
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadAll()
+    setRefreshing(false)
+  }, [loadAll])
 
-  const stats = useMemo(() => {
-    const cash = filteredSales.filter((s) => s.paymentMethod === 'cash')
-    const mpesa = filteredSales.filter((s) => s.paymentMethod === 'mpesa' || s.paymentMethod === 'mobile_money')
-    const debt = filteredSales.filter((s) => s.paymentMethod === 'debt')
-    return {
-      total: { amount: filteredSales.reduce((a, s) => a + s.totalAmount, 0), count: filteredSales.length },
-      cash: { amount: cash.reduce((a, s) => a + s.totalAmount, 0), count: cash.length },
-      mpesa: { amount: mpesa.reduce((a, s) => a + s.totalAmount, 0), count: mpesa.length },
-      debt: { amount: debt.reduce((a, s) => a + s.totalAmount, 0), count: debt.length },
+  function OnlineBadge() {
+    if (isOnline) {
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <WifiOff size={13} color={success} />
+          <Text style={{ fontSize: 11, color: success, fontWeight: '700' }}>LIVE</Text>
+        </View>
+      )
     }
-  }, [filteredSales])
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <WifiOff size={13} color={textMuted} />
+        <Text style={{ fontSize: 11, color: textMuted, fontWeight: '700' }}>OFFLINE</Text>
+      </View>
+    )
+  }
 
-  const chartData = useMemo(() => {
-    const items = [
-      { label: 'Cash', value: stats.cash.amount, color: '#22C55E' },
-      { label: 'M-Pesa', value: stats.mpesa.amount, color: '#10B981' },
-      { label: 'Debt', value: stats.debt.amount, color: '#F59E0B' },
-    ].filter((i) => i.value > 0)
-    return { items, max: Math.max(...items.map((i) => i.value), 1) }
-  }, [stats])
-
-  const dateRangeLabel = useMemo(() => {
-    if (filteredSales.length === 0) return 'No sales'
-    const sorted = [...filteredSales].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    const first = sorted[0]; const last = sorted[sorted.length - 1]
-    return first.createdAt === last.createdAt ? formatDate(first.createdAt) : `${formatDate(first.createdAt)} – ${formatDate(last.createdAt)}`
-  }, [filteredSales])
+  const reportCards: ReportCardDef[] = [
+    {
+      title: 'Sales Report',
+      description: 'Revenue, top products, payment methods',
+      icon: <TrendingUp size={22} color={brand} />,
+      color: brand,
+      route: '/reports/sales',
+    },
+    {
+      title: 'Inventory Report',
+      description: 'Stock value, dead stock, reorder suggestions',
+      icon: <Package size={22} color="#8B5CF6" />,
+      color: '#8B5CF6',
+      route: '/reports/inventory',
+    },
+    {
+      title: 'Debt Report',
+      description: 'Aging buckets, outstanding by customer',
+      icon: <Users size={22} color="#F59E0B" />,
+      color: '#F59E0B',
+      route: '/reports/debt',
+      badge: debt && debt.activeDebtCount > 0 ? debt.activeDebtCount : undefined,
+    },
+    {
+      title: 'Expense Report',
+      description: 'Monthly breakdown, category totals',
+      icon: <Receipt size={22} color="#10B981" />,
+      color: '#10B981',
+      route: '/reports/expense',
+    },
+  ]
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
-      <AppHeader title="Sales Reports" />
-      <DateFilterRow value={dateFilter} onChange={setDateFilter} />
-      <PaymentFilterRow value={paymentFilter} onChange={setPaymentFilter} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 88 }} showsVerticalScrollIndicator={false}>
-        <StatsSection stats={stats} debtCollected={debtCollected} dateRangeLabel={dateRangeLabel} />
-        {chartData.items.length > 0 && <SimpleBarChart data={chartData.items} maxValue={chartData.max} />}
-        <TouchableOpacity onPress={() => setShowExport(true)} style={[s.exportBtn, { backgroundColor: brand }]}>
-
-          <Download size={15} color="#fff" /><Text style={s.exportBtnText}>Export Report</Text>
-        </TouchableOpacity>
-        <View style={s.listHeader}>
-          <Text style={[s.listTitle, { color: text }]}>Transactions</Text>
-          <Text style={[s.listCount, { color: textMuted }]}>{filteredSales.length}</Text>
+      <AppHeader title="Reports" rightAction={<OnlineBadge />} />
+      <ScrollView
+        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Today summary */}
+        <View style={[s.todayCard, { backgroundColor: brand + '10', borderColor: brand + '30' }]}>
+          <Text style={[s.todayLabel, { color: brand }]}>
+            Today — {new Date().toLocaleDateString('en-KE', { weekday: 'long', month: 'short', day: 'numeric' })}
+          </Text>
+          {sales ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                <Text style={[s.todayAmount, { color: text }]}>
+                  {formatCurrency(sales.totalAmount)}
+                </Text>
+                <Text style={{ color: textMuted, fontSize: 13 }}>
+                  {sales.count} sale{sales.count !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+                {sales.cashAmount > 0 && <Text style={{ fontSize: 11, color: '#22C55E', fontWeight: '700' }}>Cash {formatCurrency(sales.cashAmount)}</Text>}
+                {sales.mpesaAmount > 0 && <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '700' }}>M-Pesa {formatCurrency(sales.mpesaAmount)}</Text>}
+                {sales.debtAmount > 0 && <Text style={{ fontSize: 11, color: '#F59E0B', fontWeight: '700' }}>Debt {formatCurrency(sales.debtAmount)}</Text>}
+              </View>
+            </>
+          ) : (
+            <Text style={{ color: textMuted, fontSize: 13 }}>Loading...</Text>
+          )}
         </View>
-        {filteredSales.length === 0 ? (
-          <View style={[s.empty, { backgroundColor: card, borderColor: border }]}>
 
-            <Receipt size={32} color={textMuted} /><Text style={[s.emptyText, { color: textMuted }]}>No sales found</Text>
+        {/* Alert cards */}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {stock && stock.lowStockCount > 0 && (
+            <TouchableOpacity
+              style={[s.alertCard, { backgroundColor: danger + '15', borderColor: danger + '30' }]}
+              onPress={() => router.push('/reports/inventory' as any)}
+            >
+              <AlertTriangle size={18} color={danger} />
+              <Text style={[s.alertValue, { color: danger }]}>{stock.lowStockCount}</Text>
+              <Text style={[s.alertLabel, { color: danger }]}>Low Stock</Text>
+              {stock.outOfStockCount > 0 && (
+                <Text style={{ fontSize: 10, color: danger }}>{stock.outOfStockCount} out</Text>
+              )}
+            </TouchableOpacity>
+          )}
+          {debt && debt.overdueDebtCount > 0 && (
+            <TouchableOpacity
+              style={[s.alertCard, { backgroundColor: '#F59E0B' + '15', borderColor: '#F59E0B' + '30' }]}
+              onPress={() => router.push('/reports/debt' as any)}
+            >
+              <Clock size={18} color="#F59E0B" />
+              <Text style={[s.alertValue, { color: '#F59E0B' }]}>{debt.overdueDebtCount}</Text>
+              <Text style={[s.alertLabel, { color: '#F59E0B' }]}>Overdue</Text>
+              <Text style={{ fontSize: 10, color: textMuted }}>{formatCurrency(debt.totalOutstanding)} owed</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Outstanding total */}
+        {debt && debt.totalOutstanding > 0 && (
+          <View style={[s.outstandingCard, { backgroundColor: cardBg, borderColor: border }]}>
+            <View style={s.outstandingRow}>
+              <View>
+                <Text style={[s.outstandingLabel, { color: textMuted }]}>Total Outstanding</Text>
+                <Text style={[s.outstandingAmount, { color: text }]}>{formatCurrency(debt.totalOutstanding)}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[s.outstandingLabel, { color: textMuted }]}>Collected Today</Text>
+                <Text style={[s.outstandingAmount, { color: '#A855F7' }]}>{formatCurrency(debt.collectedToday)}</Text>
+              </View>
+            </View>
           </View>
-        ) : filteredSales.map((sale) => (
-          <SaleRow key={sale.id} sale={sale} onPress={() => { setSelectedSale(sale); setDetailVisible(true) }} />
+        )}
+
+        {/* Sync status */}
+        {syncCtx && (
+          <View style={[s.syncCard, { backgroundColor: isOnline ? success + '15' : danger + '15', borderColor: isOnline ? success + '30' : danger + '30' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {isOnline ? <Cloud size={14} color={success} /> : <WifiOff size={14} color={danger} />}
+              <Text style={{ fontSize: 12, color: isOnline ? success : danger, fontWeight: '600' }}>
+                {isOnline ? 'Connected to cloud' : 'Working offline'}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 10, color: textMuted, marginTop: 2, marginLeft: 20 }}>
+              {syncCtx.dataFreshnessNote}. {syncCtx.pendingSyncCount > 0 ? `${syncCtx.pendingSyncCount} changes waiting.` : 'All changes synced.'}
+            </Text>
+          </View>
+        )}
+
+        {/* Report cards */}
+        <Text style={[s.sectionTitle, { color: textMuted }]}>All Reports</Text>
+        {reportCards.map((item) => (
+          <TouchableOpacity
+            key={item.route}
+            style={[s.reportCard, { backgroundColor: cardBg, borderColor: border }]}
+            onPress={() => router.push(item.route as any)}
+          >
+            <View style={[s.reportIconWrap, { backgroundColor: item.color + '20' }]}>
+              {item.icon}
+            </View>
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[s.reportTitle, { color: text }]}>{item.title}</Text>
+                {item.badge !== undefined && (
+                  <View style={{ backgroundColor: danger, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 }}>
+                    <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>{item.badge}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[s.reportDesc, { color: textMuted }]}>{item.description}</Text>
+            </View>
+            <ArrowRight size={18} color={textMuted} />
+          </TouchableOpacity>
         ))}
       </ScrollView>
-      <ExportModal sales={filteredSales} visible={showExport} onClose={() => setShowExport(false)} />
-      <SaleDetailModal sale={selectedSale} visible={detailVisible} onClose={() => setDetailVisible(false)} />
     </SafeAreaView>
   )
 }
 
 const s = StyleSheet.create({
-  exportBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, marginHorizontal: 12, marginTop: 10, paddingVertical: 12, borderRadius: 10 },
-  exportBtnText: { color: '#fff', fontWeight: '800' as const, fontSize: 14 },
-  listHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 6 },
-  listTitle: { fontSize: 15, fontWeight: '800' as const },
-  listCount: { fontSize: 13, fontWeight: '600' as const },
-  empty: { marginHorizontal: 12, padding: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center' as const, gap: 12 },
-  emptyText: { fontSize: 14, fontWeight: '600' as const },
+  todayCard: { borderRadius: 14, padding: 16, borderWidth: 1 },
+  todayLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  todayAmount: { fontWeight: '800', fontSize: 28 },
+  alertCard: { flex: 1, borderRadius: 12, padding: 12, borderWidth: 1, alignItems: 'center' },
+  alertValue: { fontSize: 18, fontWeight: '900', marginTop: 4 },
+  alertLabel: { fontSize: 11, fontWeight: '600' },
+  outstandingCard: { borderRadius: 12, padding: 14, borderWidth: 1 },
+  outstandingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  outstandingLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+  outstandingAmount: { fontSize: 20, fontWeight: '800', marginTop: 2 },
+  syncCard: { borderRadius: 10, padding: 10, borderWidth: 1 },
+  sectionTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, marginBottom: 4 },
+  reportCard: { borderRadius: 14, padding: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
+  reportIconWrap: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  reportTitle: { fontWeight: '800', fontSize: 15 },
+  reportDesc: { fontSize: 12, marginTop: 2 },
 })

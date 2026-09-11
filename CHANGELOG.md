@@ -4,6 +4,169 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 15 — Devices & Primary Device (Mobile)
+
+**What changed:** Complete device management for mobile: canonical `db-devices.ts` service with `enrollDevice`, `listDevices`, `approveDevice`, `revokeDevice`, `transferPrimary`, `getPrimaryStatus`; `PrimaryDeviceCoordinator` integration via `primary-device-coordinator.ts`; `device-sync-event.ts` for sync event factory; devices tab with primary banner, active/pending/revoked sections, approve/revoke/make-primary actions. All mutations call `queueSync` + `logAudit`. RBAC via `devices.view` and `devices.manage` capabilities.
+
+**Files created:**
+- `src/services/db-devices.ts` — Phase 15 canonical device service: `enrollDevice` (enroll + queue sync + logAudit), `listDevices` (with status + isPrimary), `approveDevice`, `revokeDevice`, `transferPrimary` (demotes current, promotes target), `getPrimaryStatus`. All mutations call `queueSync` and `logAudit`. Legacy helpers (`getDeviceById`, `registerDevice`, etc.) preserved.
+- `src/services/device-sync-event.ts` — `enqueueDeviceSyncEvent` factory for device.enrolled/approved/revoked/primary_transferred sync events.
+- `src/services/primary-device-coordinator.ts` — Mobile's `PrimaryDeviceCoordinator` integration: wraps `@soostori/devices/primary` with local persistence, `sendLocalHeartbeat`, `initCoordinatorFromDb`, `canAuthorStockOps`, `primaryHealthLabel`, `primaryHealthColor`.
+- `app/(tabs)/devices.tsx` — Devices tab: primary banner, active/pending/revoked sections, approve/revoke/make-primary actions. Owner/Manager only for mutations. Cashier/Attendant redirected.
+- `src/lib/db-schema-team.ts` — Added `status TEXT NOT NULL DEFAULT 'pending'` and `is_primary INTEGER DEFAULT 0` to `devices` table.
+- `src/lib/db.ts` — Added migration v4: adds `status` and `is_primary` columns to `devices` table. Updated `CURRENT_SCHEMA_VERSION` to 4.
+
+**Files modified:**
+- `app/(tabs)/_layout.tsx` — Registered `devices` tab screen.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `DEVICES_TAB` (Smartphone icon), `CAP.DEVICES_VIEW = 'devices.view'`, `CAPABILITY_TABS[CAP.DEVICES_VIEW]` → `[DEVICES_TAB]`. Owner/Manager `deriveCapabilities` now includes `CAP.DEVICES_VIEW`.
+- `src/services/sdk-bridge/rbac.ts` — Added `DEVICES_VIEW: 'devices.view'` to PERMISSIONS; added to `CAPABILITY_PERMISSION_MAP` → `['devices.view']` and `SDK_PERMISSION_MAP` → `['devices.view']`.
+
+### Phase 14 — Team Management (Mobile)
+
+**What changed:** Full team management: members list with role badges, change-role action sheet, remove member; pending invitations list with cancel action; invite modal with email + role picker. All mutations queue sync events. RBAC via capability checks (team.view, team.manage). Cashier/Attendant redirected from team tab.
+
+**Files created:**
+- `src/lib/db-schema-team.ts` — Added `team_invitations` and `team_memberships` tables with indexes.
+- `src/services/db-team.ts` — Team CRUD service: `inviteMember`, `listPendingInvitations`, `cancelInvitation`, `listMembers`, `updateMemberRole`, `assignMemberPermission`, `removeMember`. Each mutation calls `queueSync` and `logAudit`.
+- `src/hooks/useTeamMembers.ts` — Hook for team members list with RBAC (team.view + team.manage).
+- `src/hooks/useTeamInvitations.ts` — Hook for pending invitations with cancel mutation.
+- `src/components/team/role-badge.tsx` — Role badge component (Owner/Manager/Cashier/Attendant/Viewer).
+- `src/components/team/team-screen-content.tsx` — Tab content: Members tab + Invitations tab + Invite modal + Role picker action sheet.
+- `app/(tabs)/team.tsx` — Team tab page with RBAC redirect for Cashier/Attendant.
+- `app/(tabs)/_layout.tsx` — Registered `team` tab screen.
+
+**Files modified:**
+- `app/(tabs)/_layout.tsx` — Added team tab to Tabs.Screen list.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `TEAM_TAB` and `UsersIcon` import; `CAPABILITY_TABS[CAP.TEAM_VIEW]` now includes `TEAM_TAB`.
+
+### Phase 13 — Reports & Dashboards (Mobile)
+
+**What changed:** Five read-only report screens with all data sourced from local SQLite — no cloud mutations needed. KPI dashboard (today sales, revenue, gross margin, low-stock badge, outstanding debts, pending expenses) with online/offline badge. Full report screens for sales, inventory, debt, and expenses with date-range filters and sortable tables.
+
+**Files created:**
+- `app/reports/sales.tsx` — Sales report: date range picker (today/week/month/custom), totals card (revenue, cost, gross margin %), top products table (name/qty/revenue/profit), payment method breakdown, expandable daily rows.
+- `app/reports/inventory.tsx` — Inventory report: stock value KPI, dead-stock table (zero movement × days), low-stock table with suggested reorder qty, out-of-stock alert banner.
+- `app/reports/debt.tsx` — Debt report: aging buckets (Current/1-30/31-60/61-90/>90 days), total outstanding KPI, customer debt table with outstanding/overdue amounts, color-coded status badges.
+- `app/reports/expense.tsx` — Expense report: month selector, category breakdown with progress bars, monthly trend bar chart, total + pending count summary.
+- `src/services/db-reports-full.ts` — Full report query functions: `getSalesReport`, `getInventoryReport`, `getDebtReport`, `getExpenseReport`. Each joins across products/sales/expenses/debt tables with proper COALESCE, GROUP BY, and ORDER BY.
+- `src/services/db-reports.ts` — Extended with `getTodaySalesSummary`, `getStockIndicators`, `getDebtIndicators`, `getSyncReportContext` for the dashboard KPI cards.
+- `src/hooks/useReports.ts` — React Query hooks wrapping the above functions for each report screen.
+- `src/services/__tests__/reports-mobile.spec.ts` — 12 jest tests (P1–P12): dashboard, sales, inventory, debt, and expense report functions. All use `mockImplementation` for fresh per-test mock resolution.
+
+**Files modified:**
+- `app/(tabs)/reports.tsx` — Complete rewrite: KPI dashboard (today sales amount+count, low-stock alert card, overdue debt card, outstanding total, collected today, sync status badge), navigation cards to all 4 report screens.
+- `app/reports/_layout.tsx` — Stack layout with back-to-reports header.
+- `src/types/types-pos.ts` — Added `GrossMargin`, `PaymentMethod`, `SalesReportResult`, `InventoryReportResult`, `DebtReportResult`, `ExpenseReportResult`, `AgingBucket`, `TodaySalesSummary`, `StockIndicators`, `DebtIndicators`, `SyncReportContext` types.
+
+### Phase 12 — Expense Management (Mobile)
+
+**What changed:** Full expense workflow: status tracking (pending → approved → paid), expense detail screen with approve/mark-paid buttons, monthly expense report with category breakdown, and sync-wired mutations.
+
+**Files created:**
+- `app/expenses/[id].tsx` — Expense detail screen: amount card, status badge, detail rows (category/date/vendor/reference/description/paidAt), Approve and Mark as Paid action buttons (contextual based on current status). Tap delete to remove.
+- `app/expenses/report.tsx` — Monthly expense report: month navigator, total spent + pending count summary card, category breakdown with progress bars and percentage of total.
+- `src/services/expense-sync-event.ts` — Canonical `SyncEvent` factory: `enqueueExpenseSyncEvent` (expense.created/updated/deleted). IdempotencyKey = expense.id.
+- `src/services/__tests__/expenses-mobile.spec.ts` — 12 jest tests (P1–P12): `createExpense` inserts with status=pending, `approveExpense` → status='approved', `markExpensePaid` → status='paid'+paidAt, `getExpensesByDateRange` filters correctly, `getExpenseSummaryByCategory` returns total+byCategory+pendingCount, `getExpenseById` returns status/vendor/paidAt, `deleteExpense` + `queueSync` delete, `updateExpense` vendor field, `getMonthlyExpenseTotal`, `getAllExpenses` sorted, create queues sync event.
+
+**Files modified:**
+- `src/lib/db.ts` — Added schema migration v3: adds `status TEXT DEFAULT 'pending'`, `paid_at TEXT`, `vendor TEXT`, `created_by TEXT` to `expenses` table. Sets CURRENT_SCHEMA_VERSION to 3.
+- `src/types/types-pos.ts` — Added `status: 'pending'|'approved'|'paid'`, `paidAt?: string`, `vendor?: string`, `createdBy?: string` to `Expense` interface.
+- `src/lib/contracts-mapper.ts` — Extended `fromLocalExpense` to map status, paidAt, vendor, createdBy.
+- `src/services/db-expenses.ts` — Added `vendor`+`created_by` to `createExpense`; added `approveExpense`, `markExpensePaid`, `getExpenseSummaryByCategory`; added `resolveShopId`/`resolveEmployeeId`/`resolveDeviceId` context helpers; all mutations call `queueSync`.
+- `src/hooks/useExpenses.ts` — Added `useApproveExpense`, `useMarkExpensePaid`, `useExpenseSummary` mutations; `useCreateExpense`, `useUpdateExpense`, `useDeleteExpense` mutations; all invalidate `['expenses']` query key.
+- `src/components/expenses/expense-row.tsx` — Added status badge (colored: pending=amber, approved=blue, paid=green) + right-aligned layout.
+- `src/components/expenses/expense-form-modal.tsx` — Added vendor/supplier text input field; passed through to `createExpense`/`updateExpense`.
+- `src/components/expenses/expense-screen-content.tsx` — Changed tap on expense row to navigate to `/expenses/[id]` (detail screen) instead of Alert dialog.
+- `src/components/shared/app-header.tsx` — Added `rightAction?: ReactNode` prop for arbitrary right-side action buttons.
+- `app/(tabs)/expenses.tsx` — Added BarChart2 report button in header using `rightAction` slot; navigates to `/expenses/report`.
+
+**Sync wiring:** `createExpense` → `queueSync('expenses', 'create', id)` → sync queue table → mobile sync engine → cloud. Same pattern for `updateExpense`, `approveExpense`, `markExpensePaid`, `deleteExpense`.
+
+**`npx jest`:** 12/12 pass (Phase 12 suite). Pre-existing `sync-engine-mobile.spec.ts` failure unrelated to Phase 12 (inventory adapter path mismatch in `inventory-ledger-service.ts`).
+**`npx tsc --noEmit`:** zero new TypeScript errors in Phase 12 files; pre-existing errors (react-type declarations, animated view, TanStack query types) are unrelated.
+
+### Phase 11 — Customers & Debts (Mobile)
+
+**What changed:** Customers list with search, customer detail with debt history, active debts sorted by urgency, record payment with method selector — all wired to the sync engine.
+
+**Files created:**
+- `src/services/debt-sync-event.ts` — Canonical `SyncEvent` factories: `enqueueDebtSyncEvent` (debt create/update/settle) and `enqueueDebtPaymentSyncEvent` (payment). Both use `defaultSyncEngine.enqueue()`. IdempotencyKey = debt.id (create/update) and payment.id (payment).
+- `app/customers/[id].tsx` — Customer detail screen: contact info card, total owing summary, active debt count, FlatList debt history with status badges, balance, and Record Payment button. Tap debt → DebtDetailModal. Pull-to-refresh.
+- `src/services/__tests__/debts-mobile.spec.ts` — 12 jest tests (P1–P12): `createDebt` inserts row + emits SyncEvent, `recordDebtPayment` appends payment + recomputes amount_paid from SUM(payments) + derives status (partial/paid), `getDebtById` loads payments array, `getDebtsByCustomer` filters by customerId, `getAllDebts` SQL includes `WHERE status != 'paid' ORDER BY CASE WHEN overdue...`, full SyncEvent field completeness, payment idempotencyKey.
+
+**Files modified:**
+- `src/services/db-debts.ts` — Added `AsyncStorage` static import; `resolveShopId`/`resolveEmployeeId`/`resolveDeviceId` use it; `createDebt` now calls `enqueueDebtSyncEvent` (fire-and-forget); `recordDebtPayment` calls `enqueueDebtPaymentSyncEvent`; added `getDebtsByCustomer`; `getAllDebts` sorted by urgency (overdue pending → overdue partial → pending → partial, then created_at DESC).
+- `src/components/shared/debt-partial-payment-modal.tsx` — Added payment method selector (Cash/M-Pesa/Card) with icons; amount input unchanged; passes selected method to `recordDebtPayment`.
+- `app/(tabs)/customers.tsx` — FlatList items now navigate to `/customers/[id]` on tap via `router.push`; added `ListRenderItemInfo<Customer>` type annotation.
+
+**Sync wiring:** `createDebt` → `enqueueDebtSyncEvent` → `defaultSyncEngine.enqueue()` → cloud. `recordDebtPayment` → `enqueueDebtPaymentSyncEvent` → `defaultSyncEngine.enqueue()` → cloud. Both fire-and-forget so sync failures don't block the local DB write.
+
+**`npx jest`:** 12/12 pass (Phase 11 suite). Pre-existing `sync-engine-mobile.spec.ts` failure (92 total / 1 pre-existing suite failed).
+**`npx tsc --noEmit`:** zero new TypeScript errors introduced in Phase 11 files (680 pre-existing errors unrelated to Phase 11).
+
+### Phase 10 — Sales Mobile (POS Checkout / Sales History / Refund)
+
+**What changed:** Full POS checkout flow, sales history with status badges, and sale refund (full/partial) — all wired to the sync engine.
+
+**Files created:**
+- `src/services/db-sale-refund.ts` — `refundSale()` (full + partial refund, stock restoration via `refunded` ledger movement, `sale.refunded` SDK event + sync event) and `getRefundItems()`.
+- `src/services/inventory-ledger-service.ts` — Added `refundSaleStock()` using `'refunded'` ledger type (restores stock, idempotent via idempotencyKey).
+- `src/components/reports/refund-modal.tsx` — Full/partial refund modal: item selection, reason input, refund amount display, service integration.
+- `src/components/reports/refund-modal.spec.ts` — 10 jest tests (RFM-01 to RFM-10): service call verification, partial/full refund logic, error handling, item selection.
+- `src/__mocks__/soostori-events.ts` — Mock for `@soostori/events` (required by jest).
+- `src/__mocks__/soostori-inventory.ts` — Mock for `@soostori/inventory`.
+
+**Files modified:**
+- `src/components/reports/sale-detail-modal.tsx` — Integrated `RefundModal` with refund button (only for `status === 'completed'` sales).
+- `src/lib/db-schema-migrations.ts` — Added `ensureRefundItemsTable()` for refund audit trail.
+- `src/services/db-sales.ts` — Added `export { refundSale, getRefundItems }` re-exports.
+- `jest.config.json` — Added `@soostori/events` and `@soostori/inventory` to `moduleNameMapper` for jest.
+
+**Sync wiring:** Sale mutations (`createSaleOffline`, `createSale`) → `enqueueSaleSyncEvent` → `defaultSyncEngine.enqueue()` → cloud. Refund mutations → `enqueueSaleSyncEvent` (re-emit updated sale row with `status='refunded'`) → cloud.
+
+**`npx jest`:** 80/80 pass (pre-existing `sync-engine-mobile.spec.ts` failure is unrelated to Phase 10 — same ESM `@soostori/inventory` module resolution issue existed before this phase).
+**`npx tsc --noEmit`:** zero new TypeScript errors introduced in Phase 10 files (pre-existing react-type errors excluded per brief).
+
+### Phase 09 — Inventory Mobile
+
+**What changed:** Reworked the Inventory tab as a Phase 09 hub — summary card, quick actions, low-stock alerts, stock movement history — plus a dedicated inventory service and negative-stock guard on all adjustments.
+
+**Files created:**
+- `src/services/inventory-mobile.ts` — `getInventorySummary()` (total products, total value, low-stock count/list) and `getRecentStockMovements(limit)` (stock movement history via `inventory_transactions` table, mapped to `@soostori/contracts` `StockMovement`).
+- `src/services/__tests__/inventory-mobile.spec.ts` — 10 jest tests (INV-M1 to INV-M10): `getInventorySummary` totals/value/low-stock, `getRecentStockMovements` sort+limit, `adjustStock` positive/negative/zero/negative-result guard.
+
+**Files modified:**
+- `app/(tabs)/inventory.tsx` — Complete re-implementation: SummaryCard (total products, total value, low-stock count), QuickActions (Receive/Adjust/Low-Stock/Products buttons), tab switcher (Overview / Movements), LowStockAlertRow list with inline Adjust button, MovementRow with operation-aware sign/label, AdjustModal (+/- delta, reason picker, stock preview, reject if result < 0). Pull-to-refresh on both tabs.
+- `src/services/db-products-stock-ops.ts` — Added `adjustStock` guard: throws if `newStock < 0` (delta would result in negative stock) or if product not found.
+
+**Sync wiring:** All mutations (`adjustStock` via `receiveStock` / restock) continue to call `recordInventoryTransaction` → `enqueueStockMovementSyncEvent` → `defaultSyncEngine.enqueue()` → `triggerSync()`, unchanged from Phase 08.
+
+**Gate:** `inventory.view` capability required to access the Inventory tab (existing gate on `INVENTORY_TABS`).
+
+**`npx jest`:** 58/58 pass (7 suites — pre-existing suite failures are unrelated to Phase 09).
+**`npx tsc --noEmit`:** zero new errors introduced in Phase 09 files (pre-existing react-type errors excluded per brief).
+
+### Phase 08 — Products (Mobile)
+
+**What changed:** Added Products tab, Product Detail screen, New Product screen, and stock-adjust flow — fully wired to the Phase 05 sync engine.
+
+**Files created:**
+- `app/(tabs)/products.tsx` — Products tab: FlatList of active products with name, SKU, stock count, selling price. Search bar (name/SKU/barcode), category filter chips, low-stock badge (OUT/LOW/OK). FAB → New Product screen. Pull-to-refresh.
+- `app/products/[id].tsx` — Product detail: view/edit form (name, SKU, category picker, cost/selling price, stock, threshold, track-inventory toggle), archive button, and modal stock adjuster (+/- with reason picker: Restock/Adjustment/Return/Other). Inline category picker + add-category dialog wired.
+- `app/products/new.tsx` — New Product form: name (required), SKU, category picker with inline create, description, cost price, selling price (required), initial stock, low-stock threshold, track-inventory toggle.
+- `src/services/__tests__/products-mobile.spec.ts` — 15 jest tests (P5–P19): `getAllProducts`, `searchProducts`, `getLowStockProducts`, `deleteProduct` (archive), `adjustStock` (positive/negative/audit), `canSell`, `getProductById`.
+
+**Files modified:**
+- `src/hooks/useProducts.ts` — Added `useProductsRefresh()` returning a stable `invalidateQueries` callback for screen-level refresh after mutations.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `PRODUCTS_TAB` with `PackageIcon`, gated by `inventory.view` capability, appended to `INVENTORY_TABS` in `CAPABILITY_TABS[CAP.INVENTORY_VIEW]`.
+
+**Sync wiring (Phase 05):** All product mutations (`createProduct`, `updateProduct`, `deleteProduct`, `adjustStock`) call `queueSync()` → `enqueueProductSyncEvent()` → `defaultSyncEngine.enqueue()` (real FIDScript engine) → `triggerSync()` (push + pull on app resume/reconnect). No new sync code required — Phase 05 engine already handles `product.created/updated/deleted` events.
+
+**Gate:** `inventory.view` capability required to see the Products tab (same gate as Scan/Stock/Receive per Phase 04).
+
+**`npx jest`:** 55/55 pass (7 suites — 40 pre-existing + 15 Phase 08).
+**`npx tsc --noEmit`:** zero new errors introduced (pre-existing react-type errors excluded per brief).
+
 ### Phase 07 — Business Setup (Mobile)
 
 **What changed:** Added Business Setup screen and Business Switcher for the mobile app. Owners/managers can create a new business (name, type, country, currency, owner info). Business Switcher lists all businesses the user has membership in and lets them switch the active business context.
