@@ -114,5 +114,25 @@ export const makeStyles = (isDark: boolean, barBg: string) => {
       fontSize: 10,
       fontWeight: '800',
     },
+
+    // Phase 17: notification unread badge
+    notifBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -8,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.danger,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 3,
+    } as ViewStyle,
+
+    notifBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '800',
+    },
   })
 }

@@ -8,12 +8,13 @@
 import React, { useState, useEffect } from 'react'
 import { View, TouchableOpacity, Text } from 'react-native'
 import { useRouter, usePathname } from 'expo-router'
-import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X, DollarSign, Package as PackageIcon, Users as UsersIcon, Smartphone } from 'lucide-react-native'
+import { ShoppingCart, Users, Receipt, ScanLine, Package, ClipboardList, LayoutDashboard, BarChart3, CheckCircle, Menu, X, DollarSign, Package as PackageIcon, Users as UsersIcon, Smartphone, Bell } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAppTheme } from '../../hooks/useTheme'
 import { useMenu } from '../../hooks/MenuContext'
 import { SyncDot } from './sync-dot'
+import { getUnreadCount } from '../../services/db-notifications'
 import { colors } from '../../lib/theme'
 import { makeStyles, TAB_BAR_HEIGHT, FAB_SIZE } from './bottom-tab-bar.styles'
 import type { EmployeeRole } from '../../lib/sync-protocol'
@@ -55,7 +56,13 @@ const COMMISSION_TAB: TabDef = {
   icon: (a, c) => <DollarSign size={22} color={c} />,
 }
 
-// Phase 08 — Products tab (inventory.view capability gate)
+// Phase 17 — Notifications tab (notifications.view capability gate)
+const NOTIFICATIONS_TAB: TabDef = {
+  key: 'notifications',
+  label: 'Alerts',
+  href: '/(tabs)/notifications',
+  icon: (a, c) => <Bell size={22} color={c} />,
+}
 const PRODUCTS_TAB: TabDef = {
   key: 'products',
   label: 'Products',
@@ -85,6 +92,7 @@ const CAP = {
   REPORTS_VIEW:   'reports.view',
   TEAM_VIEW:      'team.view',
   DEVICES_VIEW:   'devices.view',
+  NOTIFICATIONS_VIEW: 'notifications.view',
 } as const
 
 // Maps capabilities → tabs that require them
@@ -93,6 +101,7 @@ const CAPABILITY_TABS: Record<string, TabDef[]> = {
   [CAP.REPORTS_VIEW]:   MANAGER_TABS,
   [CAP.TEAM_VIEW]:     [COMMISSION_TAB, TEAM_TAB],
   [CAP.DEVICES_VIEW]:  [DEVICES_TAB],
+  [CAP.NOTIFICATIONS_VIEW]: [NOTIFICATIONS_TAB],
 }
 
 const ICON_SIZE = 22
@@ -104,6 +113,7 @@ export function BottomTabBar() {
   const { effectiveScheme } = useAppTheme()
   const { menuOpen, toggleMenu } = useMenu()
   const [capabilities, setCapabilities] = useState<Set<string>>(new Set())
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const isDark = effectiveScheme === 'dark'
   const barBg  = isDark ? colors.dark.card : '#ffffff'
@@ -116,6 +126,12 @@ export function BottomTabBar() {
       const caps = deriveCapabilities(role)
       setCapabilities(caps)
     })
+    // Phase 17: load unread notification count
+    getUnreadCount().then(setUnreadCount).catch(() => {})
+    const interval = setInterval(() => {
+      getUnreadCount().then(setUnreadCount).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(interval)
   }, [])
 
   /**
@@ -129,10 +145,10 @@ export function BottomTabBar() {
 
     if (role === 'owner') {
       // owner has everything
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, CAP.NOTIFICATIONS_VIEW, 'pos.sell', 'team.manage', 'settings.update'])
     }
     if (role === 'manager') {
-      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, 'pos.sell', 'team.manage'])
+      return new Set([CAP.INVENTORY_VIEW, CAP.REPORTS_VIEW, CAP.TEAM_VIEW, CAP.DEVICES_VIEW, CAP.NOTIFICATIONS_VIEW, 'pos.sell', 'team.manage'])
     }
     if (role === 'attendant') {
       return new Set([CAP.INVENTORY_VIEW])
@@ -145,7 +161,8 @@ export function BottomTabBar() {
     // Phase 04: add tabs based on capabilities, not role strings
     if (capabilities.has(CAP.INVENTORY_VIEW)) tabs.push(...INVENTORY_TABS)
     if (capabilities.has(CAP.REPORTS_VIEW))   tabs.push(...MANAGER_TABS)
-    if (capabilities.has(CAP.DEVICES_VIEW)) tabs.push(DEVICES_TAB)
+    if (capabilities.has(CAP.DEVICES_VIEW))  tabs.push(DEVICES_TAB)
+    if (capabilities.has(CAP.NOTIFICATIONS_VIEW)) tabs.push(NOTIFICATIONS_TAB)
     return tabs
   }
 
@@ -175,7 +192,18 @@ export function BottomTabBar() {
           >
             {active && <View style={s.activePill} />}
             <View style={{ alignItems: 'center' }}>
-              {tab.icon(active, activeColor)}
+              {tab.key === 'notifications' && unreadCount > 0 ? (
+                <View style={{ position: 'relative' }}>
+                  {tab.icon(active, activeColor)}
+                  <View style={s.notifBadge}>
+                    <Text style={s.notifBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                tab.icon(active, activeColor)
+              )}
               <Text style={[s.tabLabel, { color: activeColor }]}>{tab.label}</Text>
             </View>
           </TouchableOpacity>

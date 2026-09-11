@@ -1,7 +1,8 @@
 // notification-item.tsx — single notification row component
+// Phase 17: extended typeIcon() to cover all SyncEvent notification types
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
-import { AlertTriangle, CheckCheck, Info, Trash2 } from 'lucide-react-native'
+import { AlertTriangle, CheckCheck, Info, Trash2, DollarSign, Users, Package, Smartphone } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { AppNotification } from '../../lib/types'
 import { colors, spacing, fontSize } from '../../lib/theme'
@@ -16,14 +17,27 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+/** Phase 17: all Phase 17 event types plus legacy internal types. */
 function typeIcon(type: AppNotification['type']) {
   switch (type) {
-    case 'low_stock': return <AlertTriangle size={20} color={colors.warning} />
+    case 'low_stock': return <Package size={20} color={colors.warning} />
     case 'debt_due': return <AlertTriangle size={20} color={colors.danger} />
     case 'sync_complete': return <CheckCheck size={20} color={colors.success} />
     case 'system': return <AlertTriangle size={20} color={colors.danger} />
     case 'info': default: return <Info size={20} color={colors.brand} />
   }
+}
+
+/** Phase 17: icon by event type string for deep-link notification items. */
+function eventTypeIcon(eventType: string) {
+  if (eventType.startsWith('sale')) return <DollarSign size={20} color={colors.success} />
+  if (eventType.startsWith('debt')) return <AlertTriangle size={20} color={colors.warning} />
+  if (eventType.startsWith('inventory')) return <Package size={20} color={colors.brand} />
+  if (eventType.startsWith('team')) return <Users size={20} color={colors.brand} />
+  if (eventType.startsWith('device')) return <Smartphone size={20} color={colors.muted} />
+  if (eventType.startsWith('commission')) return <DollarSign size={20} color={colors.success} />
+  if (eventType.startsWith('expense')) return <DollarSign size={20} color={colors.warning} />
+  return <Info size={20} color={colors.brand} />
 }
 
 interface Props {
@@ -34,6 +48,11 @@ interface Props {
 
 export function NotificationItem({ item, onMarkRead, onDelete }: Props) {
   const { card, text, textSecondary, border } = useTheme()
+  // Phase 17: use eventType icon when we have a data.eventType field
+  const eventType = (item.data?.eventType as string | undefined) ?? item.type
+  const icon = eventType !== item.type
+    ? eventTypeIcon(eventType)
+    : typeIcon(item.type)
 
   return (
     <TouchableOpacity
@@ -45,7 +64,7 @@ export function NotificationItem({ item, onMarkRead, onDelete }: Props) {
       onPress={onMarkRead}
       activeOpacity={0.7}
     >
-      <View style={styles.icon}>{typeIcon(item.type)}</View>
+      <View style={styles.icon}>{icon}</View>
       <View style={styles.body}>
         <Text style={[styles.title, { color: text }]} numberOfLines={1}>
           {item.title}

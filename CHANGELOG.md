@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 17 — Notifications / Integrations (Mobile)
+
+**What changed:** Event Dispatcher for mobile: Expo Push notifications, SQLite notifications store, `useNotifications` hook with `getByType()`, deep linking on notification tap, wired into sync engine for high/urgent events, notifications tab with unread badge on bottom tab bar.
+
+**Files created:**
+- `src/services/notifications/expo-push-channel.ts` — `ExpoPushChannel`: permission request, token registration, `sendExpoNotification()` (immediate local), `sendPushToToken()` (server-initiated), `eventToDeepLink()` for all Phase 17 event types, `buildDeepLinkPath()`.
+- `src/services/db-notifications.ts` — Extended Phase 01 store: added `eventType`, `businessId`, `userId`, `priority`, `readAt` columns via ALTER TABLE; `notification_preferences` table; `createNotification()` Phase 17 signature; `getUnread()`, `getByEventType()`, `markAsRead()` with `read_at` timestamp; `getPreference()`, `setPreference()` for user opt-outs.
+
+**Files modified:**
+- `src/hooks/useNotifications.ts` — Added `useNotificationsByType(eventType)` query; `isLoading` forwarded from React Query state.
+- `app/(tabs)/notifications.tsx` — Deep linking on tap (`sale.created` → Sale detail, `debt.payment_recorded` → Debt detail, `inventory.low_stock` → Inventory alerts, etc.); filter bar by event category (All / Sales / Debt / Inventory / Team).
+- `src/services/mobile-sync-engine.ts` — Added `dispatchNotification()` (persists to SQLite + fires Expo notification); `eventPayloadSummary()` human-readable body per event type; `applyAndNotify()` wrapper that fires notifications for high/urgent events after successful `apply()`.
+- `src/services/mobile-sync-service.ts` — `pullAndApply()` now calls `applyAndNotify()` instead of `apply()` so cloud-pulled events also trigger notifications.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `NOTIFICATIONS_TAB` with `Bell` icon; `notifications.view` capability gate; unread count badge (polls every 30s); `NOTIFICATIONS_VIEW` added to owner/manager capability sets.
+- `src/components/bottom-tab-bar/bottom-tab-bar.styles.ts` — Added `notifBadge` and `notifBadgeText` styles.
+
 ### Phase 16 — Offline-First (Mobile)
 
 **What changed:** Unified sync outbox with retry backoff, dead-letter queue, `useSyncStatus` hook, duplicate-push fix on reconnect, background push on app suspend, stock-rejection conflict escalation, and `pending_offline` sale recovery UI.

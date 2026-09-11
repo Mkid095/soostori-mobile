@@ -19,6 +19,7 @@ import { uploadEventToCloud } from './sync-upload'
 import { applySaleEvent, applyProductEvent, applyCustomerEvent, cloudEventToSyncEvent } from './sync-apply'
 import type { SyncEvent } from '@soostori/contracts'
 import type { SyncApplyResult } from '@soostori/contracts'
+import type { DeviceId, EmployeeId } from '@soostori/core'
 
 // ── Schema ─────────────────────────────────────────────────────────────────
 
@@ -150,8 +151,8 @@ export async function pushOutbox(): Promise<{ pushed: number; failed: number }> 
         entityKind: row.entity_kind as SyncEvent['entityKind'],
         entityId: row.entity_id,
         operation: row.operation as SyncEvent['operation'],
-        originatingDeviceId: 'mobile',
-        originatingEmployeeId: 'system',
+        originatingDeviceId: 'mobile' as DeviceId,
+        originatingEmployeeId: 'system' as EmployeeId,
         clientSequence: Date.now(),
         clientCreatedAt: row.created_at,
         entityVersion: 1,
@@ -224,6 +225,119 @@ export async function pull(lastSyncAt: string | null): Promise<PullResult> {
 
 // ── Apply ─────────────────────────────────────────────────────────────────
 
+/** Phase 17: derive notification event type from SyncEvent entityKind + operation. */
+function syncEventType(event: SyncEvent): string {
+  const { entityKind } = event
+  // operation is 'create' | 'update' | 'delete' | 'tombstone'.
+  // Some Phase 17 events carry their sub-type in the payload.
+  const p = event.payload as Record<string, unknown>
+  const payloadOp = p?.operation as string | undefined
+
+  switch (entityKind) {
+    case 'sale': {
+      if (payloadOp === 'refund') return 'sale.refunded'
+      return `sale.${event.operation}`
+    }
+    case 'debt':       return event.operation === 'create' ? 'debt.created' : `debt.${event.operation}`
+    case 'debtPayment': return 'debt.payment_recorded'
+    case 'expense':    return `expense.${event.operation}`
+    case 'product': {
+      if (payloadOp === 'low_stock' || payloadOp === 'adjust' || event.operation === 'update') return 'inventory.low_stock'
+      return `inventory.${event.operation}`
+    }
+    case 'stockMovement': return payloadOp === 'receive' ? 'inventory.received' : 'inventory.adjusted'
+    case 'employee':    return event.operation === 'create' ? 'team.member_added' : `team.${event.operation}`
+    case 'device':      return `device.${event.operation}`
+    case 'commissionLedger': return event.operation === 'create' ? 'commission.created' : `commission.${event.operation}`
+    default:            return `${entityKind}.${event.operation}`
+  }
+}
+
+/** Phase 17: map SyncEvent → NotificationEvent fields for dispatch. */
+async function dispatchNotification(event: SyncEvent): Promise<void> {
+  // Lazy import to avoid circular dependency
+  const { createNotification } = await import('./db-notifications')
+  const { sendExpoNotification } = await import('./notifications/expo-push-channel')
+
+  const et = syncEventType(event)
+  const HIGH_PRIORITY = new Set(['inventory.low_stock', 'debt.payment_recorded', 'debt.settled', 'device.revoked'])
+  const priority = HIGH_PRIORITY.has(et) ? 'high' : 'normal'
+
+  const TITLES: Record<string, string> = {
+    'sale.created': 'New Sale',
+    'sale.refunded': 'Sale Refunded',
+    'debt.created': 'New Debt',
+    'debt.payment_recorded': 'Payment Received',
+    'debt.settled': 'Debt Settled',
+    'expense.created': 'New Expense',
+    'expense.approved': 'Expense Approved',
+    'inventory.low_stock': 'Low Stock Alert',
+    'inventory.received': 'Stock Received',
+    'inventory.adjusted': 'Stock Adjusted',
+    'team.member_added': 'Team Update',
+    'device.enrolled': 'Device Enrolled',
+    'device.approved': 'Device Approved',
+    'device.revoked': 'Device Revoked',
+    'commission.created': 'Commission Earned',
+  }
+
+  const title = TITLES[et] ?? 'Notification'
+  const body = eventPayloadSummary(event, et)
+
+  // 1. Persist to local SQLite notifications table
+  try {
+    await createNotification({
+      title,
+      body,
+      data: { eventType: et, payload: event.payload },
+      eventType: et as Parameters<typeof createNotification>[0]['eventType'],
+      businessId: event.businessId,
+      priority: priority as Parameters<typeof createNotification>[0]['priority'],
+    })
+  } catch (err) {
+    console.warn('[SyncEngine] Failed to persist notification:', err)
+  }
+
+  // 2. Fire Expo local notification (immediate)
+  try {
+    await sendExpoNotification({ title, body, eventType: et, payload: event.payload, priority })
+  } catch (err) {
+    console.warn('[SyncEngine] Failed to send Expo notification:', err)
+  }
+}
+
+function eventPayloadSummary(event: SyncEvent, et: string): string {
+  const p = event.payload as Record<string, unknown>
+  switch (et) {
+    case 'sale.created':
+      return `Sale of ${p.totalAmount ?? '—'} recorded`
+    case 'debt.payment_recorded':
+      return `Payment of ${p.amountPaid ?? '—'} recorded`
+    case 'debt.settled':
+      return `Debt of ${p.amount ?? '—'} fully paid`
+    case 'debt.created':
+      return `New debt of ${p.amount ?? '—'} created`
+    case 'inventory.low_stock':
+      return `${p.productName ?? 'Product'} is low on stock`
+    case 'inventory.received':
+      return `Stock received: ${p.productName ?? 'product'}`
+    case 'expense.created':
+      return `Expense of ${p.amount ?? '—'} logged`
+    case 'expense.approved':
+      return `Expense of ${p.amount ?? '—'} approved`
+    case 'commission.created':
+      return `Commission of ${p.amount ?? '—'} earned`
+    case 'team.member_added':
+      return `${p.memberName ?? 'New member'} joined the team`
+    case 'device.enrolled':
+      return `New device enrolled`
+    case 'device.revoked':
+      return `Device access has been revoked`
+    default:
+      return et
+  }
+}
+
 export async function apply(
   _local: unknown,
   event: SyncEvent,
@@ -237,4 +351,29 @@ export async function apply(
   if (event.entityKind === 'customer') return applyCustomerEvent(database, event)
 
   return { state: 'no_op' }
+}
+
+/**
+ * applyAndNotify — Phase 17 wrapper around apply() that fires notifications
+ * for high/urgent events after successful apply.
+ * Call this from pullAndApply() instead of apply() directly.
+ */
+export async function applyAndNotify(
+  _local: unknown,
+  event: SyncEvent,
+  shopId: string,
+): Promise<SyncApplyResult> {
+  const result = await apply(_local, event, shopId)
+  if (result.state === 'applied') {
+    const et = syncEventType(event)
+    const HIGH_URGENT = new Set([
+      'inventory.low_stock', 'debt.payment_recorded', 'debt.settled',
+      'device.revoked', 'commission.created', 'sale.created',
+    ])
+    if (HIGH_URGENT.has(et)) {
+      // Fire-and-forget — errors are caught inside dispatchNotification
+      dispatchNotification(event).catch(console.warn)
+    }
+  }
+  return result
 }

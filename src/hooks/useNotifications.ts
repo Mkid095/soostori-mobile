@@ -1,13 +1,19 @@
-// React hook for notifications — wraps db-notifications service
+// useNotifications.ts — Phase 17 React Query hook for notifications
+//
+// Wraps db-notifications service with React Query.
+// Business logic stays in services, NOT components.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getNotifications,
   getUnreadCount,
+  getUnread,
   markAsRead,
   markAllAsRead,
   deleteNotification,
   createLowStockNotification,
+  getByEventType,
+  type NotificationEventType,
 } from '../services/db-notifications'
 import type { AppNotification } from '../lib/types'
 import { getAllProducts } from '../services/db-products'
@@ -56,7 +62,17 @@ export function useNotifications() {
   }
 }
 
-// Checks products for low stock and generates notifications
+/** Phase 17: get notifications filtered by event type. */
+export function useNotificationsByType(eventType: NotificationEventType) {
+  return useQuery<AppNotification[]>({
+    queryKey: ['notifications', 'byType', eventType],
+    queryFn: () => getByEventType(eventType),
+  })
+}
+
+// ── Low-stock checker ─────────────────────────────────────────────────────────
+
+/** Checks products for low stock and generates notifications. */
 export function useLowStockChecker() {
   const queryClient = useQueryClient()
 
@@ -64,7 +80,7 @@ export function useLowStockChecker() {
     mutationFn: async () => {
       const products = await getAllProducts()
       const belowThreshold = products.filter(
-        (p) => p.trackInventory && p.stockQuantity <= p.lowStockThreshold && p.lowStockThreshold > 0
+        (p) => p.trackInventory && p.stockQuantity <= p.lowStockThreshold && p.lowStockThreshold > 0,
       )
       await Promise.all(belowThreshold.map((p) => createLowStockNotification(p)))
       queryClient.invalidateQueries({ queryKey: ['notifications'] })

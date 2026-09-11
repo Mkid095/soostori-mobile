@@ -17,9 +17,11 @@ import {
   enqueue as realEnqueue,
   pull as realPull,
   apply as realApply,
+  applyAndNotify,
   pushOutbox,
 } from './mobile-sync-engine'
 import { getDb } from '../lib/db'
+import { ensureNotificationSchema } from './db-notifications'
 import { getOutboxCounts, getDeadLetterCount } from './sync-dead-letter'
 import { getCurrentShopId } from './session-helper'
 import {
@@ -59,6 +61,7 @@ export async function initMobileSync(): Promise<void> {
   syncInitialized = true
 
   await ensureOutboxTable()
+  await ensureNotificationSchema() // Phase 17: ensure notifications table + preferences
 
   // Monkey-patch the singleton object that @soostori/contracts exports.
   // Since JS modules bind objects by reference, patching the object properties
@@ -98,7 +101,7 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
     )
     if (existing) continue
 
-    const result = await realApply(null, event, shopId)
+    const result = await applyAndNotify(null, event, shopId)
 
     // Write idempotency key after successful apply
     if (result.state === 'applied') {
