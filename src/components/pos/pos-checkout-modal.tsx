@@ -33,7 +33,7 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
   const [step, setStep] = useState<CheckoutStep>('cart')
   const [selectedPayment, setSelectedPayment] = useState<'cash' | 'sendMoney' | 'mpesaPaybill' | 'bankPaybill' | 'pochi' | 'debt'>('cash')
   // mpesaStatus: idle → input → requesting → polling → success | error
-  const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'input' | 'requesting' | 'polling' | 'success' | 'error'>('idle')
+  const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'input' | 'requesting' | 'polling' | 'completed' | 'error'>('idle')
   const [mpesaPhone, setMpesaPhone] = useState('')
   const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null)
   const [mpesaError, setMpesaError] = useState('')
@@ -72,12 +72,12 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
       try {
         // checkoutRequestId is stored in mpesaReceipt as a temporary holder during polling
         const status = await queryStkStatus(mpesaReceipt ?? 'pending')
-        if (status === 'success') {
+        if (status === 'completed') {
           clearInterval(pollingRef.current!)
           pollingRef.current = null
           const receipt = await validateMpesaReceipt(mpesaReceipt ?? '')
           setMpesaReceipt(receipt)
-          setMpesaStatus('success')
+          setMpesaStatus('completed')
         } else if (status === 'failed') {
           clearInterval(pollingRef.current!)
           pollingRef.current = null
@@ -94,7 +94,7 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
 
   const cartTotal = cart.reduce((s, i) => s + i.totalPrice, 0)
   const isMpesa = selectedPayment !== 'cash' && selectedPayment !== 'debt'
-  const canConfirm = !isMpesa || mpesaStatus === 'success'
+  const canConfirm = !isMpesa || mpesaStatus === 'completed'
 
   function add(productId: string) {
     const product = products.find((p) => p.id === productId)

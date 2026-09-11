@@ -6,7 +6,7 @@ import type { ShopSettings } from '../../lib/types'
 import { MpesaDetails } from './pos-checkout-mpesa-details'
 import type { PaymentMethod } from './usePaymentMethods'
 
-type MpesaStatus = 'idle' | 'input' | 'requesting' | 'polling' | 'success' | 'error'
+type MpesaStatus = 'idle' | 'input' | 'requesting' | 'polling' | 'completed' | 'error'
 
 interface Props {
   paymentMethods: { value: PaymentMethod; label: string }[]
@@ -128,7 +128,7 @@ export function PaymentMethodSelector({
               </View>
             )}
 
-            {mpesaStatus === 'success' && (
+            {mpesaStatus === 'completed' && (
               <View style={{ marginTop: 12, backgroundColor: '#16a34a', borderRadius: 12, padding: 14, alignItems: 'center' }}>
                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Payment Received</Text>
               </View>

@@ -13,7 +13,7 @@ import { resolveOrCreateEmployee } from './cloud-auth-employee'
 import { resolveOrRegisterDevice } from './cloud-auth-device'
 
 export type CloudAuthResult =
-  | { ok: true; response: CloudAuthResponse }
+  | { ok: true; response: CloudAuthResponse; enrollmentState: 'new_device' | 'existing_device' }
   | { ok: false; code: 'PERSON_NOT_FOUND' }
 
 export async function cloudSendMagicCode(email: string): Promise<void> {
@@ -42,6 +42,9 @@ export async function cloudVerifyMagicCode(email: string, code: string): Promise
   const employee = await resolveOrCreateEmployee(shopId, email, existing)
   const entitlement = await resolveSubscription(shopId)
 
+  // Phase 18: flag new_device when cloud employee record has no prior device enrollment
+  const isNewDevice = !existing.cloudEmployeeId
+
   return {
     ok: true,
     response: {
@@ -50,6 +53,7 @@ export async function cloudVerifyMagicCode(email: string, code: string): Promise
       entitlement,
       serverTime: new Date().toISOString(),
     },
+    enrollmentState: isNewDevice ? 'new_device' : 'existing_device',
   }
 }
 
@@ -105,6 +109,9 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAu
   const employee = await resolveOrCreateEmployee(shopId, email, existing)
   const entitlement = await resolveSubscription(shopId)
 
+  // Phase 18: flag new_device when cloud employee record has no prior device enrollment
+  const isNewDevice = !existing.cloudEmployeeId
+
   return {
     ok: true,
     response: {
@@ -113,6 +120,7 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAu
       entitlement,
       serverTime: new Date().toISOString(),
     },
+    enrollmentState: isNewDevice ? 'new_device' : 'existing_device',
   }
 }
 
@@ -122,7 +130,7 @@ export async function cloudGetServerTime(): Promise<string> {
 
 // ─── internal helpers ────────────────────────────────────────────────────────
 
-type EmployeeRow = { id: string; shopId: string; email?: string; role: string }
+type EmployeeRow = { id: string; shopId: string; email?: string; role: string; cloudEmployeeId?: string }
 type ShopRow = { id: string; name: string; slug?: string; plan?: string; status?: string }
 
 async function findExistingEmployee(email: string): Promise<EmployeeRow | null> {

@@ -7,7 +7,7 @@ import { seedExpenseCategories } from './db-expense-seed'
 import { generateId } from './formatters'
 
 const DEFAULT_SHOP_ID = 'shop-default'
-const CURRENT_SCHEMA_VERSION = 4
+const CURRENT_SCHEMA_VERSION = 5
 
 let db: SQLite.SQLiteDatabase | null = null
 
@@ -86,6 +86,27 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
     await addColumnIfNotExists(database, 'devices', 'status', "TEXT DEFAULT 'pending'")
     await addColumnIfNotExists(database, 'devices', 'is_primary', 'INTEGER DEFAULT 0')
     await setSchemaVersion(database, 4)
+  }
+
+  if (currentVersion < 5) {
+    // Version 5: Phase 18 — stk_push_state table + audit_logs SDK columns
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS stk_push_state (
+        id                   TEXT PRIMARY KEY,
+        checkout_request_id  TEXT UNIQUE NOT NULL,
+        phone                TEXT NOT NULL,
+        amount               REAL NOT NULL,
+        status               TEXT NOT NULL DEFAULT 'pending',
+        receipt_number       TEXT,
+        created_at           TEXT NOT NULL,
+        completed_at         TEXT
+      )
+    `)
+    await addColumnIfNotExists(database, 'audit_logs', 'event_id', 'TEXT')
+    await addColumnIfNotExists(database, 'audit_logs', 'event_name', 'TEXT')
+    await addColumnIfNotExists(database, 'audit_logs', 'actor_type', "TEXT DEFAULT 'system'")
+    await addColumnIfNotExists(database, 'audit_logs', 'shop_id', 'TEXT')
+    await setSchemaVersion(database, 5)
   }
 
   // Future migrations go here:

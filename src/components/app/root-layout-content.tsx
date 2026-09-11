@@ -1,6 +1,6 @@
 // root-layout-content.tsx — Auth gate + device recovery for RootLayout
 import { useEffect, useState } from 'react'
-import { View, Text, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, ActivityIndicator } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -11,8 +11,6 @@ import { BusinessProvider } from '../../hooks/BusinessContext'
 import { useCloudSync } from '../../hooks/useCloudSync'
 import { useDeviceHeartbeat } from '../../hooks/useDeviceHeartbeat'
 import { isWithinGraceWindow } from '../../services/entitlement-cache'
-import { isNewDevice, importCloudSnapshot } from '../../services/db-device-recovery'
-import { cloudDownloadSnapshot } from '../../services/cloud-snapshot'
 import { getSession } from '../../services/cloud-auth'
 import { attachSdkBridges } from '../../services/sdk-bridge/bootstrap'
 import { mobileUpdateManager } from '../../services/adapters/updates/mobile-update-manager'
@@ -22,8 +20,9 @@ import { getQueryClient } from '../../lib/query-client'
 import { getDb } from '../../lib/db'
 import { initMobileSync, startSyncListeners, stopSyncListeners } from '../../services/mobile-sync-service'
 import { BusinessSwitcherHost } from './BusinessSwitcherHost'
+import { getCurrentSubscription, revalidateSubscription } from '../../services/subscription-guard'
 
-type AuthState = 'loading' | 'welcome' | 'auth' | 'app'
+type AuthState = 'loading' | 'welcome' | 'auth' | 'app' | 'blocked'
 
 function RootLoading() {
   return (
@@ -40,6 +39,12 @@ function RootError({ msg }: { msg: string }) {
       <Text style={{ color: '#ef4444', fontSize: 16 }}>Database error: {msg}</Text>
     </View>
   )
+}
+
+// Lazy-load subscription blocked screen to avoid circular imports
+function SubscriptionBlockedFallback() {
+  const { default: Screen } = require('../../../app/subscription-blocked')
+  return <Screen />
 }
 
 export function RootLayoutContent() {
@@ -77,6 +82,18 @@ export function RootLayoutContent() {
         setDbReady(true)
         const session = await getSession()
         if (!session.userId) { setAuthState('welcome'); return }
+
+        // Phase 18: attempt one cloud revalidation before showing the app
+        const shopId = session.shopId ?? ''
+        if (shopId) {
+          await revalidateSubscription(shopId).catch(() => {})
+        }
+        const subStatus = await getCurrentSubscription()
+        if (subStatus === 'expired') {
+          setAuthState('blocked')
+          return
+        }
+
         setAuthState((await isWithinGraceWindow()) && session.employeeId ? 'app' : 'auth')
       })
       .catch((e: unknown) => setError(String(e)))
@@ -84,6 +101,7 @@ export function RootLayoutContent() {
 
   if (error) return <RootError msg={error} />
   if (!dbReady || authState === 'loading') return <RootLoading />
+  if (authState === 'blocked') return <SubscriptionBlockedFallback />
 
   return (
     <QueryClientProvider client={getQueryClient()}>

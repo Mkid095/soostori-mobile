@@ -1,543 +1,106 @@
 // useAuthSdk.ts — CloudAuth + OperationalAuth wrapper for React Native
 // Full auth flow: cloud auth (Google) → operational enrollment → local PIN verification
+// Phase 18: refactored into auth-cloud-flow, auth-pin-flow, auth-device-enrollment
 import { useState, useEffect, useCallback, useRef } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
-import { cacheSession } from '../services/cloud-auth-employee'
 import { cacheEntitlement } from '../services/entitlement-cache'
-import { db, id } from '../lib/instant-client'
 import { rnPlatformAdapter, rnOperationalPlatformAdapter } from '../services/sdk-adapter'
-
-// ─── Minimal SDK type inlines (avoids exports-map TS resolution issue) ─────────
-
-type AuthErrorCode =
-  | 'INVALID_CREDENTIALS' | 'EMAIL_NOT_VERIFIED' | 'EMAIL_ALREADY_EXISTS'
-  | 'USER_NOT_FOUND' | 'WEAK_PASSWORD' | 'VERIFICATION_EXPIRED' | 'VERIFICATION_INVALID'
-  | 'RESET_EXPIRED' | 'RESET_INVALID' | 'DEVICE_NOT_TRUSTED' | 'SESSION_REVOKED'
-  | 'NETWORK_OFFLINE' | 'RATE_LIMITED' | 'OAUTH_ERROR' | 'ENROLLMENT_REQUIRED'
-  | 'PIN_VERIFICATION_FAILED' | 'PIN_NOT_SET' | 'PERSON_NOT_FOUND' | 'UNKNOWN'
-
-interface AuthError { code: AuthErrorCode; message: string; retryAfterMs?: number }
-
-type AuthResult<T = void> =
-  | { ok: true; data: T }
-  | { ok: false; error: AuthError }
-
-type DeviceEnrollmentState =
-  | 'DEVICE_NOT_ENROLLED'
-  | 'PIN_SETUP_REQUIRED'
-  | 'PIN_VERIFICATION_REQUIRED'
-  | 'OPERATIONAL'
-
-interface OperationalSession {
-  employeeId: string
-  shopId: string
-  deviceId: string
-  startedAt: string
-  expiresAt: string
-}
-
-// ─── SDK class types — resolved via require() to bypass exports-map ─────────────
+import { type AuthSdkState, type AuthResult, type AuthErrorCode, type DeviceEnrollmentState, type OperationalSession } from './auth-types'
+import { createCloudAuth, signInWithGoogle as cloudSignIn } from './auth-cloud-flow'
+import { setupPin, verifyPin, getLocalHasPin } from './auth-pin-flow'
+import { determineEnrollmentState } from './auth-device-enrollment'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const CloudAuthClass = (require('@soostori/auth') as any).CloudAuth ?? (require('@soostori/auth/dist/cloud-auth') as any).CloudAuth
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const OperationalAuthClass = (require('@soostori/auth') as any).OperationalAuth ?? (require('@soostori/auth/dist/operational-auth') as any).OperationalAuth
-
-if (!CloudAuthClass) throw new Error('@soostori/auth CloudAuth not found — check package installation')
-if (!OperationalAuthClass) throw new Error('@soostori/auth OperationalAuth not found — check package installation')
-
-const CloudAuth = CloudAuthClass as {
-  new(platform: unknown, api: unknown): {
-    signInWithGoogleIdToken(opts: { idToken: string; clientName: string }): Promise<AuthResult<{
-      userId: string; email: string; displayName?: string; idToken: string
-      accessToken: string; refreshToken?: string; isNewUser: boolean
-    }>>
-    restoreSession(): Promise<unknown>
-    signOut(): Promise<void>
-  }
-}
+const OperationalAuthClass = (require('@soostori/auth') as any).OperationalAuth
+  ?? (require('@soostori/auth/dist/operational-auth') as any).OperationalAuth
+if (!OperationalAuthClass) throw new Error('@soostori/auth OperationalAuth not found')
 
 const OperationalAuth = OperationalAuthClass as {
   new(platform: unknown): {
-    getEnrollmentState(opts: {
-      cloudApi?: {
-        getDeviceStatus(shopId: string, deviceId: string): Promise<{ exists: boolean; hasPin: boolean }>
-      }
-      shopId: string
-      deviceId: string
-    }): Promise<DeviceEnrollmentState>
-    beginEnrollment(opts: {
-      cloudApi: unknown
-      state: DeviceEnrollmentState
-      shopId: string
-      deviceId: string
-      deviceName: string
-      employeeId?: string
-      pinVerificationHash?: string
-    }): Promise<AuthResult<{ nextState: DeviceEnrollmentState } | { needsCloudVerify: true; employeeId: string }>>
-    completeEnrollmentWithCloudVerify(opts: {
-      cloudApi: unknown
-      employeeId: string
-      shopId: string
-      deviceId: string
-      newPin: string
-      newPinHash: string
-      newPinSalt: string
-    }): Promise<AuthResult<void>>
-    setupPin(opts: {
-      pin: string
-      hashPin: (pin: string, salt?: string) => Promise<{ hash: string; salt: string }>
-      employeeId: string
-      shopId: string
-      deviceId: string
-    }): Promise<AuthResult<{ salt: string; verifierHash: string }>>
-    verifyPin(opts: {
-      pin: string
-      verifyPin: (pin: string, hashHex: string, saltHex: string) => boolean
-      employeeId: string
-      shopId: string
-      deviceId: string
-      sessionTtlMs?: number
-    }): Promise<AuthResult<OperationalSession>>
-    hasPinEnrolled(): Promise<boolean>
-    changePin(opts: unknown): Promise<AuthResult<unknown>>
-    clearPin(): Promise<void>
-    get failedAttemptCount(): number
-    get isLocked(): boolean
-    get lockedUntilMs(): number | null
     deserializeSession(raw: string): OperationalSession | null
-    serializeSession(session: OperationalSession): string
+    serializeSession(s: OperationalSession): string
+    verifyPin(opts: unknown): Promise<AuthResult<OperationalSession>>
+    hasPinEnrolled(): Promise<boolean>
+    clearPin(): Promise<void>
+    get failedAttemptCount(): number; get isLocked(): boolean; get lockedUntilMs(): number | null
   }
 }
-
-// ─── PBKDF2 crypto (react-native-quick-crypto) ────────────────────────────────
-
-const ITERATIONS = 100_000
-const KEY_BYTES = 32
-
-async function pbkdf2Hash(pin: string, saltHex?: string): Promise<{ hash: string; salt: string }> {
-  const { pbkdf2Sync, randomBytes } = require('react-native-quick-crypto') as {
-    pbkdf2Sync: (pin: string, salt: Buffer | Uint8Array, iter: number, keyLen: number, digest: string) => Buffer
-    randomBytes: (n: number) => Uint8Array
-  }
-  const salt = saltHex ? Buffer.from(saltHex, 'hex') : randomBytes(32)
-  const saltHexOut = salt.toString('hex')
-  const derived = pbkdf2Sync(pin, salt, ITERATIONS, KEY_BYTES, 'sha256')
-  return { hash: derived.toString('hex'), salt: saltHexOut }
-}
-
-function pbkdf2Verify(pin: string, hashHex: string, saltHex: string): boolean {
-  const { pbkdf2Sync } = require('react-native-quick-crypto') as {
-    pbkdf2Sync: (pin: string, salt: Buffer | Uint8Array, iter: number, keyLen: number, digest: string) => Buffer
-  }
-  const salt = Buffer.from(saltHex, 'hex')
-  const derived = pbkdf2Sync(pin, salt, ITERATIONS, KEY_BYTES, 'sha256')
-  return derived.toString('hex') === hashHex
-}
-
-// ─── Cloud API for OperationalAuth ──────────────────────────────────────────
-
-function buildCloudApi(shopId: string) {
-  return {
-    getDeviceStatus: async (_shopId: string, _deviceId: string) => {
-      const result = await db.queryOnce({ devices: {} })
-      const devices = (result.data.devices as any[]) || []
-      const myDevice = devices.find((d: any) => d.shopId === _shopId)
-      return {
-        exists: !!myDevice,
-        hasPin: myDevice?.hasPin ?? false,
-      }
-    },
-    createDeviceEnrollment: async (shopId: string, deviceId: string, deviceName: string) => {
-      const devId = id()
-      await db.transact(db.tx.devices[devId].create({
-        id: devId,
-        shopId,
-        deviceId,
-        deviceName,
-        deviceType: 'mobile',
-        status: 'authorized',
-        lastSeenAt: new Date().toISOString(),
-        authorizedAt: new Date().toISOString(),
-        isLanHost: false,
-        isPrimary: false,
-        hasPin: false,
-        pinSetupAt: '',
-      }))
-      return { deviceId: devId, hasPin: false }
-    },
-    verifyPinForEnrollment: async (employeeId: string, pinHash: string) => {
-      const { getDb } = await import('../lib/db')
-      const localDb = await getDb()
-      const rows = await localDb.getAllAsync<Record<string, unknown>>(
-        `SELECT pin_hash FROM employees WHERE id = ?`,
-        [employeeId]
-      )
-      if (!rows.length) return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Employee not found' } }
-      if (String(rows[0].pin_hash) !== pinHash) {
-        return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Incorrect PIN' } }
-      }
-      return {
-        data: {
-          enrollmentToken: `enroll_${Date.now()}`,
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        },
-      }
-    },
-    setDeviceHasPin: async (_shopId: string, _deviceId: string, _hasPin: true) => {
-      // push-schema blocker: hasPin cannot be added to FIDScript schema via transact
-      // Local state tracked via SecureStore instead
-    },
-  }
-}
-
-// ─── AuthApiClient for CloudAuth ──────────────────────────────────────────────
-
-function buildAuthApiClient() {
-  return {
-    exchangeGoogleCode: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Use signInWithGoogleIdToken' } }),
-    linkGoogleAccount: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    signInWithIdToken: async (clientName: string, idToken: string) => {
-      const { cloudExchangeGoogleToken } = await import('../services/cloud-auth-backend')
-      try {
-        const result = await cloudExchangeGoogleToken(idToken)
-        if (!result.ok) {
-          return { error: { code: 'AUTH_FAILED' as AuthErrorCode, message: result.code } }
-        }
-        return {
-          data: {
-            userId: result.response.user.id,
-            email: result.response.user.email,
-            displayName: result.response.user.email.split('@')[0],
-            idToken,
-            accessToken: result.response.user.id,
-            refreshToken: '',
-            isNewUser: false,
-          },
-        }
-      } catch (e: any) {
-        return { error: { code: 'AUTH_FAILED' as AuthErrorCode, message: e.message } }
-      }
-    },
-    registerEmail: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Email registration not supported' } }),
-    verifyEmail: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    requestPasswordReset: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    completePasswordReset: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    signInEmail: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Use Google Sign-In' } }),
-    refreshSession: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    revokeSession: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    registerTrustedDevice: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    listTrustedDevices: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    removeTrustedDevice: async () => ({ error: { code: 'UNSUPPORTED' as AuthErrorCode, message: 'Not implemented' } }),
-    verifyPinForEnrollment: async (employeeId: string, pinHash: string) => {
-      const { getDb } = await import('../lib/db')
-      const localDb = await getDb()
-      const rows = await localDb.getAllAsync<Record<string, unknown>>(
-        `SELECT pin_hash FROM employees WHERE id = ?`,
-        [employeeId]
-      )
-      if (!rows.length) return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Employee not found' } }
-      if (String(rows[0].pin_hash) !== pinHash) {
-        return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Incorrect PIN' } }
-      }
-      return {
-        data: {
-          enrollmentToken: `enroll_${Date.now()}`,
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        },
-      }
-    },
-  }
-}
-
-// ─── Hook state & instance refs ────────────────────────────────────────────────
 
 export interface AuthSdkState {
-  isCloudAuthenticated: boolean
-  cloudUser: { id: string; email: string } | null
-  shopId: string | null
-  enrollmentState: DeviceEnrollmentState | null
-  isOperational: boolean
-  operationalSession: OperationalSession | null
-  isLoading: boolean
-  error: string | null
+  isCloudAuthenticated: boolean; cloudUser: { id: string; email: string } | null
+  shopId: string | null; enrollmentState: DeviceEnrollmentState | null
+  isOperational: boolean; operationalSession: OperationalSession | null
+  isLoading: boolean; error: string | null; enrollmentError?: AuthErrorCode
 }
 
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useAuthSdk() {
-  const cloudAuthRef = useRef<InstanceType<typeof CloudAuth> | null>(null)
+  const cloudAuthRef = useRef<ReturnType<typeof createCloudAuth> | null>(null)
   const opAuthRef = useRef<InstanceType<typeof OperationalAuth> | null>(null)
   const deviceIdRef = useRef<string | null>(null)
 
   const [state, setState] = useState<AuthSdkState>({
-    isCloudAuthenticated: false,
-    cloudUser: null,
-    shopId: null,
-    enrollmentState: null,
-    isOperational: false,
-    operationalSession: null,
-    isLoading: true,
-    error: null,
+    isCloudAuthenticated: false, cloudUser: null, shopId: null,
+    enrollmentState: null, isOperational: false, operationalSession: null, isLoading: true, error: null,
   })
 
-  // Initialize SDK instances and try to restore sessions
   useEffect(() => {
     ;(async () => {
-      // Get or create device ID
       let devId = await AsyncStorage.getItem('@soostori:deviceId')
-      if (!devId) {
-        devId = `mob_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        await AsyncStorage.setItem('@soostori:deviceId', devId)
-      }
+      if (!devId) { devId = `mob_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; await AsyncStorage.setItem('@soostori:deviceId', devId) }
       deviceIdRef.current = devId
-
-      // Init CloudAuth
-      cloudAuthRef.current = new CloudAuth(rnPlatformAdapter, buildAuthApiClient())
-
-      // Init OperationalAuth
+      cloudAuthRef.current = createCloudAuth(rnPlatformAdapter)
       opAuthRef.current = new OperationalAuth(rnOperationalPlatformAdapter)
-
-      // Try to restore operational session from secure storage
       const storedSession = await SecureStore.getItemAsync('@soostori:opSession')
       if (storedSession && opAuthRef.current) {
         const session = opAuthRef.current.deserializeSession(storedSession)
-        if (session) {
-          setState(s => ({
-            ...s,
-            isOperational: true,
-            operationalSession: session,
-            isLoading: false,
-          }))
-          return
-        }
+        if (session) { setState({ isOperational: true, operationalSession: session, isLoading: false, isCloudAuthenticated: false, cloudUser: null, shopId: null, enrollmentState: null, error: null }); return }
       }
-
-      setState(s => ({ ...s, isLoading: false }))
+      setState((s) => ({ ...s, isLoading: false }))
     })()
   }, [])
 
-  // Sign in with Google (mobile native flow)
   const signInWithGoogle = useCallback(async (idToken: string) => {
     if (!cloudAuthRef.current) throw new Error('Auth not initialized')
-    setState(s => ({ ...s, isLoading: true, error: null }))
-
-    const result = await cloudAuthRef.current.signInWithGoogleIdToken({
-      idToken,
-      clientName: 'soostori-mobile',
-    })
-
-    if (!result.ok) {
-      setState(s => ({ ...s, isLoading: false, error: result.error?.message }))
-      return result
+    setState((s) => ({ ...s, isLoading: true, error: null, enrollmentError: undefined }))
+    const { ok, result } = await cloudSignIn(cloudAuthRef.current, idToken)
+    if (!ok || !result?.ok) {
+      const err = result?.error ?? { code: 'AUTH_FAILED' as AuthErrorCode, message: 'Unknown error' }
+      setState((s) => ({ ...s, isLoading: false, error: err.message })); return { ok: false, error: err } as AuthResult<never>
     }
-
-    const userId = result.data.userId
-    const email = result.data.email
-    await AsyncStorage.setItem('@soostori:cloudToken', userId)
-
-    // §17/§84: do NOT auto-create a shop. Look up an existing employee
-    // row for this email; if none exists, surface PERSON_NOT_FOUND so
-    // the UI can show the §29 contact phone.
-    const employeesResult = await db.queryOnce({ employees: {} })
-    const cloudEmployees = (employeesResult.data.employees as Array<{ id: string; shopId: string; email?: string; role?: string; hasPin?: boolean }>) || []
-    const existing = cloudEmployees.find((e) => e.email === email)
-    if (!existing) {
-      setState(s => ({ ...s, isLoading: false, error: 'PERSON_NOT_FOUND' }))
-      return { ok: false, error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'No Soostori membership for this account' } } as AuthResult<never>
-    }
-
-    const shopsResult = await db.queryOnce({ shops: {} })
-    const cloudShops = (shopsResult.data.shops as Array<{ id: string; name: string; slug?: string; status?: string; plan?: string }>) || []
-    const shop = cloudShops.find((s) => s.id === existing.shopId)
-    if (!shop) {
-      setState(s => ({ ...s, isLoading: false, error: 'PERSON_NOT_FOUND' }))
-      return { ok: false, error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'Business record missing' } } as AuthResult<never>
-    }
-
-    const shopId = shop.id
+    const { userId, email, shopId, cloudDeviceId } = result.data
+    await AsyncStorage.setItem('@soostori:cloudToken', userId); await AsyncStorage.setItem('@soostori:shopId', shopId)
     const deviceId = deviceIdRef.current || ''
-
-    // Cache session to AsyncStorage (no auto-create; the employee already
-    // exists in the cloud with the correct shopId).
-    await cacheSession(shopId, existing.id, existing.role ?? 'attendant')
-    await AsyncStorage.setItem('@soostori:shopId', shopId)
-
-    // Register or find device in cloud
-    const cloudApi = buildCloudApi(shopId)
-    let cloudDeviceId = ''
-    const devicesResult = await db.queryOnce({ devices: {} })
-    const cloudDevices = (devicesResult.data.devices as any[]) || []
-    const myDevice = cloudDevices.find((d: any) => d.deviceId === deviceId)
-    if (!myDevice) {
-      const enrolled = await cloudApi.createDeviceEnrollment(shopId, deviceId, 'Mobile Device')
-      cloudDeviceId = enrolled.deviceId
-    } else {
-      cloudDeviceId = myDevice.id
-    }
-
-    // Determine enrollment state
-    let enrollmentState: DeviceEnrollmentState = 'DEVICE_NOT_ENROLLED'
-    if (myDevice) {
-      enrollmentState = myDevice.hasPin ? 'PIN_VERIFICATION_REQUIRED' : 'PIN_SETUP_REQUIRED'
-    }
-
-    setState(s => ({
-      ...s,
-      isCloudAuthenticated: true,
-      cloudUser: { id: userId, email },
-      shopId,
-      enrollmentState,
-      isLoading: false,
-    }))
-
-    return result
+    const { enrollmentState, enrollmentError } = await determineEnrollmentState(shopId, deviceId, cloudDeviceId === '')
+    setState((s) => ({ ...s, isCloudAuthenticated: true, cloudUser: { id: userId, email }, shopId, enrollmentState, enrollmentError, isLoading: false }))
+    return { ok: true, data: result.data } as AuthResult<typeof result.data>
   }, [])
 
-  // Begin enrollment (new device)
-  const beginEnrollment = useCallback(async () => {
-    if (!opAuthRef.current || !state.shopId || !deviceIdRef.current) {
-      return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
-    }
-
-    const deviceId = deviceIdRef.current
-    const cloudApi = buildCloudApi(state.shopId)
-
-    const result = await opAuthRef.current.beginEnrollment({
-      cloudApi,
-      state: state.enrollmentState ?? 'DEVICE_NOT_ENROLLED',
-      shopId: state.shopId,
-      deviceId,
-      deviceName: 'Mobile Device',
-      employeeId: state.cloudUser?.id,
-    })
-
-    return result
-  }, [state.shopId, state.enrollmentState, state.cloudUser])
-
-  // Setup a new PIN locally
-  const setupPin = useCallback(async (pin: string) => {
-    if (!opAuthRef.current || !state.shopId || !deviceIdRef.current || !state.cloudUser) {
-      return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
-    }
-
-    const deviceId = deviceIdRef.current
-
-    const result = await opAuthRef.current.setupPin({
-      pin,
-      hashPin: pbkdf2Hash,
-      employeeId: state.cloudUser.id,
-      shopId: state.shopId,
-      deviceId,
-    })
-
-    if (result.ok) {
-      // Persist PIN enrollment locally (hasPin/pinSetupAt blocked by push-schema)
-      await SecureStore.setItemAsync('@soostori:hasPin', 'true')
-      await SecureStore.setItemAsync('@soostori:pinSalt', result.data.salt)
-      await SecureStore.setItemAsync('@soostori:pinVerifier', result.data.verifierHash)
-
-      // Verify PIN to establish operational session
-      const verifyResult = await opAuthRef.current.verifyPin({
-        pin,
-        verifyPin: pbkdf2Verify,
-        employeeId: state.cloudUser.id,
-        shopId: state.shopId,
-        deviceId,
-        sessionTtlMs: SESSION_TTL_MS,
-      })
-
-      if (verifyResult.ok) {
-        await SecureStore.setItemAsync('@soostori:opSession', opAuthRef.current.serializeSession(verifyResult.data))
-        setState(s => ({
-          ...s,
-          enrollmentState: 'OPERATIONAL',
-          isOperational: true,
-          operationalSession: verifyResult.data,
-        }))
-      }
-    }
-
+  const setupPinFn = useCallback(async (pin: string) => {
+    if (!opAuthRef.current || !state.shopId || !deviceIdRef.current || !state.cloudUser) return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
+    const result = await setupPin(opAuthRef.current, pin, state.cloudUser.id, state.shopId, deviceIdRef.current)
+    setState((s) => ({ ...s, enrollmentState: result.ok ? 'OPERATIONAL' : s.enrollmentState, isOperational: result.ok, enrollmentError: result.ok ? undefined : 'PIN_SETUP_FAILED' }))
     return result
   }, [state.shopId, state.cloudUser])
 
-  // Verify PIN for operational session
-  const verifyPin = useCallback(async (pin: string) => {
-    if (!opAuthRef.current || !state.shopId || !deviceIdRef.current || !state.cloudUser) {
-      return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
-    }
-
-    const deviceId = deviceIdRef.current
-
-    const result = await opAuthRef.current.verifyPin({
-      pin,
-      verifyPin: pbkdf2Verify,
-      employeeId: state.cloudUser.id,
-      shopId: state.shopId,
-      deviceId,
-      sessionTtlMs: SESSION_TTL_MS,
-    })
-
-    if (result.ok) {
-      await SecureStore.setItemAsync('@soostori:opSession', opAuthRef.current.serializeSession(result.data))
-      setState(s => ({
-        ...s,
-        enrollmentState: 'OPERATIONAL',
-        isOperational: true,
-        operationalSession: result.data,
-      }))
-    }
-
+  const verifyPinFn = useCallback(async (pin: string) => {
+    if (!opAuthRef.current || !state.shopId || !deviceIdRef.current || !state.cloudUser) return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
+    const result = await verifyPin(opAuthRef.current, pin, state.cloudUser.id, state.shopId, deviceIdRef.current)
+    setState((s) => ({ ...s, enrollmentState: result.ok ? 'OPERATIONAL' : s.enrollmentState, isOperational: result.ok, operationalSession: result.ok ? result.data ?? null : s.operationalSession, enrollmentError: result.ok ? undefined : result.error?.code }))
     return result
   }, [state.shopId, state.cloudUser])
 
-  // Check if device has a PIN enrolled (local secure storage check)
-  const hasPinEnrolled = useCallback(async (): Promise<boolean> => {
-    const val = await SecureStore.getItemAsync('@soostori:hasPin')
-    return val === 'true'
-  }, [])
+  const hasPinEnrolled = useCallback(async (): Promise<boolean> => getLocalHasPin(), [])
 
-  // Sign out — clears all sessions
   const signOut = useCallback(async () => {
     await SecureStore.deleteItemAsync('@soostori:opSession')
     await SecureStore.deleteItemAsync('@soostori:hasPin')
     await SecureStore.deleteItemAsync('@soostori:pinSalt')
     await SecureStore.deleteItemAsync('@soostori:pinVerifier')
-    await AsyncStorage.multiRemove([
-      '@soostori:cloudToken',
-      '@soostori:shopId',
-      '@soostori:employeeId',
-      '@soostori:employeeRole',
-    ])
-    await cacheEntitlement({
-      shopId: 'default', status: 'expired', plan: 'free',
-      expiresAt: new Date(0).toISOString(),
-      verifiedAt: new Date(0).toISOString(),
-      serverTime: new Date(0).toISOString(),
-      nextVerificationDeadline: new Date(0).toISOString(),
-    }, new Date(0).toISOString())
-    setState({
-      isCloudAuthenticated: false,
-      cloudUser: null,
-      shopId: null,
-      enrollmentState: null,
-      isOperational: false,
-      operationalSession: null,
-      isLoading: false,
-      error: null,
-    })
+    await AsyncStorage.multiRemove(['@soostori:cloudToken', '@soostori:shopId', '@soostori:employeeId', '@soostori:employeeRole'])
+    await cacheEntitlement({ shopId: 'default', status: 'expired', plan: 'free', expiresAt: new Date(0).toISOString(), verifiedAt: new Date(0).toISOString(), serverTime: new Date(0).toISOString(), nextVerificationDeadline: new Date(0).toISOString() }, new Date(0).toISOString())
+    setState({ isCloudAuthenticated: false, cloudUser: null, shopId: null, enrollmentState: null, isOperational: false, operationalSession: null, isLoading: false, error: null })
   }, [])
 
-  return {
-    ...state,
-    signInWithGoogle,
-    beginEnrollment,
-    setupPin,
-    verifyPin,
-    hasPinEnrolled,
-    signOut,
-  }
+  return { ...state, signInWithGoogle, setupPin: setupPinFn, verifyPin: verifyPinFn, hasPinEnrolled, signOut }
 }

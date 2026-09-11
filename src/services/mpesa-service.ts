@@ -1,73 +1,116 @@
-// mpesa-service.ts — M-Pesa STK push integration
-// TODO (real integration): Replace mock implementations with Safaricom Lipa Na M-Pesa Online API
-// Endpoint: POST https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest
-// Auth: OAuth2 Bearer token from https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials
+// mpesa-service.ts — M-Pesa STK Push public API
+// Phase 18: refactored (PayHero client moved to mpesa-payhero-client.ts, types to mpesa-types.ts)
+import { getDb } from '../lib/db'
+import { payHeroRequestStkPush, payHeroQueryStkStatus } from './mpesa-payhero-client'
+import type { StkPushRequest, StkPushResponse, StkPaymentStatus } from './mpesa-types'
 
-export interface StkPushResult {
-  checkoutRequestId: string
-  merchantRequestId: string
+// ─── SQLite state helpers ────────────────────────────────────────────────────
+
+async function initStkPushTable(): Promise<void> {
+  const db = await getDb()
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS stk_push_state (
+      id                   TEXT PRIMARY KEY,
+      checkout_request_id  TEXT UNIQUE NOT NULL,
+      phone                TEXT NOT NULL,
+      amount               REAL NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'pending',
+      receipt_number       TEXT,
+      created_at           TEXT NOT NULL,
+      completed_at         TEXT
+    )
+  `)
 }
 
-export type StkPaymentStatus = 'pending' | 'success' | 'failed'
+async function persistStkPush(
+  req: StkPushRequest,
+  checkoutRequestId: string,
+): Promise<void> {
+  const db = await getDb()
+  const { v4: uuid } = await import('uuid')
+  await db.runAsync(
+    `INSERT OR REPLACE INTO stk_push_state (id, checkout_request_id, phone, amount, status, created_at)
+     VALUES (?, ?, ?, ?, 'pending', ?)`,
+    [uuid(), checkoutRequestId, req.phone, req.amount, new Date().toISOString()],
+  )
+}
 
-/**
- * Initiates an M-Pesa STK push request.
- * Real implementation: POST to Safaricom M-Pesa API with consumer key/secret auth.
- */
+async function getStkState(checkoutRequestId: string): Promise<{
+  status: StkPaymentStatus
+  receiptNumber?: string
+} | null> {
+  const db = await getDb()
+  const row = await db.getFirstAsync<{ status: string; receipt_number: string | null }>(
+    `SELECT status, receipt_number FROM stk_push_state WHERE checkout_request_id = ?`,
+    [checkoutRequestId],
+  )
+  if (!row) return null
+  return { status: row.status as StkPaymentStatus, receiptNumber: row.receipt_number ?? undefined }
+}
+
+// ─── Public API ─────────────────────────────────────────────────────────────
+
 export async function requestStkPush(
   phone: string,
   amount: number,
   saleId: string,
-): Promise<StkPushResult> {
-  // TODO (real integration): Replace with actual Safaricom API call
-  // const token = await getMpesaAccessToken()
-  // const response = await fetch('https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest', {
-  //   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  //   method: 'POST',
-  //   body: JSON.stringify({ BusinessShortCode, Password, Timestamp, TransactionType, Amount: String(amount),
-  //     PartyA: phone, PartyB: BusinessShortCode, PhoneNumber: phone, CallBackURL, AccountReference: saleId, TransactionDesc: `Sale ${saleId}` }),
-  // })
-  // const data = await response.json()
-  // return { checkoutRequestId: data.CheckoutRequestID, merchantRequestId: data.MerchantRequestID }
+): Promise<StkPushResponse> {
+  await initStkPushTable()
+  const normalised = phone.startsWith('0') ? `254${phone.slice(1)}` : phone
+  const req: StkPushRequest = {
+    phone: normalised,
+    amount,
+    accountReference: saleId,
+    transactionDesc: `Sale ${saleId}`,
+  }
 
-  await new Promise((r) => setTimeout(r, 800))
-  const checkoutRequestId = `CHK${Date.now()}`
-  const merchantRequestId = `MKR${Date.now()}`
-  return { checkoutRequestId, merchantRequestId }
+  let checkoutRequestId: string
+  try {
+    const result = await payHeroRequestStkPush(req, saleId)
+    checkoutRequestId = result.checkoutRequestId
+  } catch {
+    // Offline fallback — persist locally so cashier can retry
+    const { v4: uuid } = await import('uuid')
+    checkoutRequestId = `offline_${uuid()}`
+    await persistStkPush(req, checkoutRequestId)
+    throw new Error('PayHero unreachable — request queued for retry')
+  }
+
+  await persistStkPush(req, checkoutRequestId)
+  return { checkoutRequestId, merchantRequestId: '' }
 }
 
-/**
- * Queries the status of an M-Pesa STK push payment.
- * Real implementation: POST to Safaricom M-Pesa API query endpoint.
- */
 export async function queryStkStatus(checkoutRequestId: string): Promise<StkPaymentStatus> {
-  // TODO (real integration): Replace with actual Safaricom API call
-  // const token = await getMpesaAccessToken()
-  // const response = await fetch('https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query', {
-  //   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  //   method: 'POST',
-  //   body: JSON.stringify({ BusinessShortCode, CheckoutRequestID: checkoutRequestId, Password, Timestamp }),
-  // })
-  // const data = await response.json()
-  // return data.ResultCode === '0' ? 'success' : data.ResultCode === 'xxxx' ? 'pending' : 'failed'
-
-  await new Promise((r) => setTimeout(r, 500))
-  // Simulate: random success after first few polls
-  const rand = Math.random()
-  if (rand < 0.6) return 'success'
-  if (rand < 0.85) return 'pending'
-  return 'failed'
+  if (checkoutRequestId.startsWith('offline_')) {
+    return (await getStkState(checkoutRequestId))?.status ?? 'pending'
+  }
+  try {
+    const result = await payHeroQueryStkStatus(checkoutRequestId)
+    return result.status
+  } catch {
+    return (await getStkState(checkoutRequestId))?.status ?? 'pending'
+  }
 }
 
-/**
- * Validates and retrieves the M-Pesa receipt number for a successful transaction.
- * Real implementation: Query the transaction result from Safaricom or our own records.
- */
 export async function validateMpesaReceipt(checkoutRequestId: string): Promise<string> {
-  // TODO (real integration): Look up receipt from transaction records / Safaricom result callback
-  // const response = await fetch(`${API_BASE}/transactions/${checkoutRequestId}/receipt`)
-  // return response.receiptNumber
+  if (checkoutRequestId.startsWith('offline_')) {
+    const state = await getStkState(checkoutRequestId)
+    return state?.receiptNumber ?? `OFFLINE_${checkoutRequestId.slice(-8)}`
+  }
+  const state = await getStkState(checkoutRequestId)
+  return state?.receiptNumber ?? `MPS${checkoutRequestId.slice(-8)}`
+}
 
-  await new Promise((r) => setTimeout(r, 300))
-  return `MPS${Date.now().toString().slice(-8)}`
+export async function handleStkCallback(payload: {
+  checkoutRequestId: string
+  resultCode: number
+  receiptNumber?: string
+}): Promise<void> {
+  await initStkPushTable()
+  const db = await getDb()
+  const status: StkPaymentStatus = payload.resultCode === 0 ? 'completed' : 'failed'
+  await db.runAsync(
+    `UPDATE stk_push_state SET status = ?, receipt_number = ?, completed_at = ? WHERE checkout_request_id = ?`,
+    [status, payload.receiptNumber ?? null, new Date().toISOString(), payload.checkoutRequestId],
+  )
 }

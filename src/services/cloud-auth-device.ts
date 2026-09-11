@@ -2,6 +2,18 @@
 import { db, id } from '../lib/instant-client'
 import { registerDeviceWithCloud } from './db-cloud-device'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SecureStore from 'expo-secure-store'
+
+/** Returns local hasPin from SecureStore (tracked locally due to push-schema gap). */
+export async function getLocalHasPin(): Promise<boolean> {
+  const val = await SecureStore.getItemAsync('@soostori:hasPin')
+  return val === 'true'
+}
+
+/** Persist hasPin to SecureStore (called after successful PIN setup). */
+export async function setLocalHasPin(value: boolean): Promise<void> {
+  await SecureStore.setItemAsync('@soostori:hasPin', value ? 'true' : 'false')
+}
 
 export async function resolveOrRegisterDevice(shopId: string): Promise<string> {
   const deviceId = await AsyncStorage.getItem('@soostori:deviceId')

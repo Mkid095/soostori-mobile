@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 18 — M-Pesa STK Push, Audit Trail, Subscription Blocked, SDK Auth Edge Cases (Mobile)
+
+**What changed:** Real PayHero M-Pesa STK Push, audit trail wiring verified, subscription-blocked UX screen, SDK auth enrollment explicit error states.
+
+**Phase 18.1 — M-Pesa STK Push:**
+- `src/services/mpesa-service.ts` — Refactored: PayHero client moved to `mpesa-payhero-client.ts`, types to `mpesa-types.ts`; retains `requestStkPush()`, `queryStkStatus()`, `validateMpesaReceipt()`, `handleStkCallback()`.
+- `src/services/mpesa-payhero-client.ts` — NEW: `payHeroPost()`, `payHeroGet()`, `payHeroRequestStkPush()`, `payHeroQueryStkStatus()`.
+- `src/services/mpesa-types.ts` — NEW: `StkPushRequest`, `StkPushResponse`, `StkPaymentStatus`, `StkCallbackPayload`, `StkStatusResponse`.
+- `app/api/mpesa/callback/route.ts` — NEW: Expo Router API route for PayHero webhook callbacks (GET token verify, POST receipt).
+
+**Phase 18.2 — Audit Trail:**
+- `src/lib/db.ts` — Migration V5: `CURRENT_SCHEMA_VERSION = 5`, adds `stk_push_state` table + SDK audit columns (`event_id`, `event_name`, `actor_type`, `shop_id`) to `audit_logs`.
+- Verified: `MobileAuditStorage` already correctly wired in `bootstrap.ts`; `attachSdkAuditRecorder()` called after DB init.
+
+**Phase 18.3 — Subscription Blocked UX:**
+- `app/subscription-blocked.tsx` — NEW: Full-screen blocked gate with Store icon, contact phone, retry button that revalidates subscription.
+- `src/components/app/root-layout-content.tsx` — Added `'blocked'` to `AuthState`; Phase 18 DB init effect calls `revalidateSubscription` and blocks with `SubscriptionBlockedFallback`.
+
+**Phase 18.4 — SDK Auth Enrollment Edge Cases:**
+- `src/hooks/useAuthSdk.ts` — Refactored: moved cloud auth to `auth-cloud-flow.ts`, PIN ops to `auth-pin-flow.ts`, enrollment state to `auth-device-enrollment.ts`; explicit enrollment error codes (`NETWORK_ERROR`, `ENROLLMENT_FAILED`, `PIN_SETUP_FAILED`); all async ops wrapped in `withTimeout()` (30s).
+- `src/hooks/auth-cloud-flow.ts` — NEW: `createCloudAuth()`, `signInWithGoogle()` with 30s timeout, `buildAuthApiClient()` with all stub methods.
+- `src/hooks/auth-pin-flow.ts` — NEW: `setupPin()`, `verifyPin()` with 30s timeout, PBKDF2 crypto, SecureStore persistence.
+- `src/hooks/auth-device-enrollment.ts` — NEW: `determineEnrollmentState()` using SecureStore `hasPin`, `buildCloudApi()` for OperationalAuth cloud calls.
+- `src/hooks/auth-types.ts` — NEW: shared `AuthErrorCode`, `AuthError`, `AuthResult`, `DeviceEnrollmentState`, `OperationalSession`, `withTimeout()`.
+- `src/services/cloud-auth-backend.ts` — `CloudAuthResult` now carries `enrollmentState: 'new_device' | 'existing_device'`; both `cloudVerifyMagicCode` and `cloudExchangeGoogleToken` compute `isNewDevice = !existing.cloudEmployeeId`.
+- `src/services/cloud-auth-device.ts` — Added `getLocalHasPin()` / `setLocalHasPin()` for SecureStore-backed hasPin persistence (cloud `devices.hasPin` gap workaround).
+
 ### Phase 17 — Notifications / Integrations (Mobile)
 
 **What changed:** Event Dispatcher for mobile: Expo Push notifications, SQLite notifications store, `useNotifications` hook with `getByType()`, deep linking on notification tap, wired into sync engine for high/urgent events, notifications tab with unread badge on bottom tab bar.
