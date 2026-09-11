@@ -8,8 +8,15 @@ All notable changes to this project will be documented in this file.
 
 **What changed:** Event Dispatcher for mobile: Expo Push notifications, SQLite notifications store, `useNotifications` hook with `getByType()`, deep linking on notification tap, wired into sync engine for high/urgent events, notifications tab with unread badge on bottom tab bar.
 
+**Refactored (split over-cap files):**
+- `src/services/notifications/expo-push-channel.ts` (193 → 136 lines) — stripped `eventToDeepLink()` and `buildDeepLinkPath()` into standalone `expo-deep-link.ts`.
+- `src/services/notifications/expo-deep-link.ts` — newly extracted: `eventToDeepLink()` for all Phase 17 event types, `buildDeepLinkPath()`.
+- `app/(tabs)/notifications.tsx` (155 → 130 lines) — extracted filter-bar JSX into `app/(tabs)/_components/notifications-filter-bar.tsx`.
+- `app/(tabs)/_components/notifications-filter-bar.tsx` — newly created: `NotificationsFilterBar` component + `matchesFilter()`.
+
 **Files created:**
-- `src/services/notifications/expo-push-channel.ts` — `ExpoPushChannel`: permission request, token registration, `sendExpoNotification()` (immediate local), `sendPushToToken()` (server-initiated), `eventToDeepLink()` for all Phase 17 event types, `buildDeepLinkPath()`.
+- `src/services/notifications/expo-deep-link.ts` — `eventToDeepLink()` + `buildDeepLinkPath()`.
+- `app/(tabs)/_components/notifications-filter-bar.tsx` — `NotificationsFilterBar` + `matchesFilter()`.
 - `src/services/db-notifications.ts` — Extended Phase 01 store: added `eventType`, `businessId`, `userId`, `priority`, `readAt` columns via ALTER TABLE; `notification_preferences` table; `createNotification()` Phase 17 signature; `getUnread()`, `getByEventType()`, `markAsRead()` with `read_at` timestamp; `getPreference()`, `setPreference()` for user opt-outs.
 
 **Files modified:**

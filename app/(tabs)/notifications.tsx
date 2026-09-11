@@ -15,23 +15,10 @@ import { useNotifications, useLowStockChecker } from '../../src/hooks/useNotific
 import { useTheme } from '../../src/hooks/useTheme'
 import { AppHeader } from '../../src/components/shared/app-header'
 import { NotificationItem } from '../../src/components/shared/notification-item'
+import { NotificationsFilterBar, matchesFilter } from './_components/notifications-filter-bar'
 import type { AppNotification } from '../../src/lib/types'
 import { colors, spacing, fontSize } from '../../src/lib/theme'
-import { eventToDeepLink } from '../../src/services/notifications/expo-push-channel'
-
-const FILTERS = [
-  { label: 'All', value: 'all' },
-  { label: 'Sales', value: 'sale' },
-  { label: 'Debt', value: 'debt' },
-  { label: 'Inventory', value: 'inventory' },
-  { label: 'Team', value: 'team' },
-]
-
-function matchesFilter(notif: AppNotification, filter: string): boolean {
-  if (filter === 'all') return true
-  const et = (notif.data?.eventType as string | undefined) ?? (notif as unknown as Record<string, unknown>).eventType as string | undefined
-  return et ? et.startsWith(filter) : false
-}
+import { eventToDeepLink } from '../../src/services/notifications/expo-deep-link'
 
 export default function NotificationsScreen() {
   const router = useRouter()
@@ -77,33 +64,12 @@ export default function NotificationsScreen() {
       )}
 
       {/* Filter bar */}
-      <View style={[styles.filterBar, { borderColor: border }]}>
-        <FlatList
-          horizontal
-          data={FILTERS}
-          keyExtractor={(f: typeof FILTERS[0]) => f.value}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: spacing.md }}
-          renderItem={({ item }: { item: typeof FILTERS[0] }) => (
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                { backgroundColor: filter === item.value ? colors.brand : 'transparent', borderColor: border },
-              ]}
-              onPress={() => setFilter(item.value)}
-            >
-              <Text
-                style={[
-                  styles.filterLabel,
-                  { color: filter === item.value ? '#fff' : textSecondary },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
+      <NotificationsFilterBar
+        filter={filter}
+        onFilterChange={setFilter}
+        border={border}
+        textSecondary={textSecondary}
+      />
 
       {filtered.length === 0 ? (
         <View style={styles.empty}>
@@ -141,14 +107,6 @@ const styles = StyleSheet.create({
   },
   summaryText: { fontSize: fontSize.sm, fontWeight: '600' },
   markAll: { fontSize: fontSize.sm, fontWeight: '600' },
-  filterBar: {
-    paddingVertical: spacing.sm, borderBottomWidth: 1,
-  },
-  filterChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderRadius: 16, borderWidth: 1, marginRight: spacing.sm,
-  },
-  filterLabel: { fontSize: fontSize.xs, fontWeight: '600' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
   emptyTitle: { fontSize: fontSize.lg, fontWeight: '700', marginTop: spacing.md },
   emptySub: { fontSize: fontSize.sm },
