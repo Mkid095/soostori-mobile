@@ -95,5 +95,24 @@ export const makeStyles = (isDark: boolean, barBg: string) => {
       elevation: 12,
       zIndex: TAB_BAR_ZINDEX + 1,
     } as ViewStyle,
+
+    syncDot: {
+      position: 'absolute',
+      bottom: 14,
+      right: 14,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 4,
+      zIndex: TAB_BAR_ZINDEX + 2,
+    } as ViewStyle,
+
+    syncDotText: {
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: '800',
+    },
   })
 }

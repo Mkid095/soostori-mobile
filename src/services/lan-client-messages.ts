@@ -44,6 +44,8 @@ export async function applySaleConfirmed(payload: SaleConfirmedPayload): Promise
 /**
  * Apply SALE_REJECTED event — mark sale as rejected.
  * Idempotent: skips if already rejected.
+ * Phase 16: if rejection is due to insufficient stock, also create a
+ * SaleReconciliationRequired conflict in sync_conflicts with ESCALATE resolution.
  */
 export async function applySaleRejected(payload: SaleRejectedPayload): Promise<void> {
   const db = await getDb()
@@ -57,6 +59,39 @@ export async function applySaleRejected(payload: SaleRejectedPayload): Promise<v
     `UPDATE sales SET status = 'rejected', updated_at = ? WHERE id = ?`,
     [payload.timestamp, payload.saleId]
   )
+
+  // Phase 16: insufficient stock → escalate to sync_conflicts
+  if (payload.reason?.toLowerCase().includes('insufficient') ||
+      payload.reason?.toLowerCase().includes('stock')) {
+    const { createConflict } = await import('./db-conflicts')
+    // Re-fetch full row to get items for reconciliation payload
+    const saleRow = await db.getFirstAsync<Record<string, unknown>>(
+      `SELECT items FROM sales WHERE id = ?`, [payload.saleId]
+    )
+    const itemsJson = saleRow?.items ?? '[]'
+    const items: Array<{ productId: string; productName: string; quantity?: number }> =
+      typeof itemsJson === 'string' ? JSON.parse(itemsJson) : itemsJson
+    const reconciliationPayload = {
+      type: 'SALE_RECONCILIATION_REQUIRED' as const,
+      saleId: payload.saleId,
+      deviceId: 'cloud',
+      reason: payload.reason,
+      items: items.map(i => ({
+        productId: i.productId,
+        productName: i.productName ?? 'Unknown',
+        requestedQty: i.quantity ?? 0,
+        availableQty: 0,
+      })),
+      timestamp: payload.timestamp,
+    }
+    await createConflict(
+      'default',
+      payload.saleId,
+      'cloud',
+      'INSUFFICIENT_STOCK',
+      JSON.stringify(reconciliationPayload),
+    )
+  }
 }
 
 /**

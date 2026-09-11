@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 16 — Offline-First (Mobile)
+
+**What changed:** Unified sync outbox with retry backoff, dead-letter queue, `useSyncStatus` hook, duplicate-push fix on reconnect, background push on app suspend, stock-rejection conflict escalation, and `pending_offline` sale recovery UI.
+
+**Files created:**
+- `src/hooks/useSyncStatus.ts` — Phase 16 sync status hook: returns `{ pending, failed, lastSyncAt, isOnline }`, polls every 30s + NetInfo listener.
+
+**Files modified:**
+- `src/services/mobile-sync-engine.ts` — Extended `sync_outbox` with `retry_count` and `next_retry_at` columns; added `sync_dead_letter` table; `enqueue()` now always writes `state='pending'` for unified retry path; `pushOutbox()` implements `in_flight` state, exponential backoff (1min→5min→15min, max 3 retries), and moves exhausted events to `sync_dead_letter`; added `getDeadLetterCount()`, `retryDeadLetter()`, `discardDeadLetter()`, `getAllDeadLetters()`, `getOutboxCounts()`.
+- `src/services/mobile-sync-service.ts` — Added `background`/`inactive` AppState handler to call `pushOutbox()` on app suspend (Phase 16 background push); removed duplicate `pushOutbox()` before `triggerSync()` in `onNetworkReconnect()` (fixes double-push on reconnect); added `LAST_SYNC_KEY` and `getLastSyncAt()`; `pullAndApply()` now persists `lastSyncAt` timestamp; added `getSyncStatus()` returning `{ pending, failed, deadLetter, lastSyncAt, isOnline }`.
+- `src/components/bottom-tab-bar/bottom-tab-bar.tsx` — Added `useSyncStatus` hook; sync status dot (green=synced, yellow=pending, red=failed, amber=offline) shown bottom-right of tab bar with count badge.
+- `src/components/bottom-tab-bar/bottom-tab-bar.styles.ts` — Added `syncDot` and `syncDotText` styles.
+- `src/services/lan-client-messages.ts` — `applySaleRejected()` now detects insufficient-stock rejections and calls `createConflict()` with `INSUFFICIENT_STOCK` conflict type and full `SaleReconciliationRequiredPayload` (Phase 16 conflict escalation).
+- `src/components/reports/sale-row.tsx` — Phase 16 `pending_offline` sales: `Clock` icon + amber left border + "Pending" badge.
+- `src/components/reports/sale-detail-modal.tsx` — Phase 16: "Retry Sync" button appears for `pending_offline` sales after 5-minute failure threshold; calls `triggerSync()`.
+
+**`npx tsc --noEmit`:** zero new TypeScript errors introduced in Phase 16 files.
+
+
 ### Phase 15 — Devices & Primary Device (Mobile)
 
 **What changed:** Complete device management for mobile: canonical `db-devices.ts` service with `enrollDevice`, `listDevices`, `approveDevice`, `revokeDevice`, `transferPrimary`, `getPrimaryStatus`; `PrimaryDeviceCoordinator` integration via `primary-device-coordinator.ts`; `device-sync-event.ts` for sync event factory; devices tab with primary banner, active/pending/revoked sections, approve/revoke/make-primary actions. All mutations call `queueSync` + `logAudit`. RBAC via `devices.view` and `devices.manage` capabilities.

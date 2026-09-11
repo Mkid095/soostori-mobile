@@ -1,0 +1,9 @@
+// sync-retry-backoff.ts — Phase 16 retry backoff constants and helpers
+// Shared by mobile-sync-engine for outbox retry logic
+
+export const RETRY_DELAYS_MS = [60_000, 300_000, 900_000] // 1min, 5min, 15min
+export const MAX_RETRIES = 3
+
+export function getNextRetryDelay(retryCount: number): number {
+  return RETRY_DELAYS_MS[retryCount - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]
+}

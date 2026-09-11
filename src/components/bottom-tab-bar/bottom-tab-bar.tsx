@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAppTheme } from '../../hooks/useTheme'
 import { useMenu } from '../../hooks/MenuContext'
+import { SyncDot } from './sync-dot'
 import { colors } from '../../lib/theme'
 import { makeStyles, TAB_BAR_HEIGHT, FAB_SIZE } from './bottom-tab-bar.styles'
 import type { EmployeeRole } from '../../lib/sync-protocol'
@@ -185,6 +186,9 @@ export function BottomTabBar() {
       <TouchableOpacity style={s.fab} onPress={toggleMenu} activeOpacity={0.85}>
         {menuOpen ? <X size={20} color="#fff" /> : <Menu size={20} color="#fff" />}
       </TouchableOpacity>
+
+      {/* Phase 16: sync status dot */}
+      <SyncDot />
     </View>
   )
 }

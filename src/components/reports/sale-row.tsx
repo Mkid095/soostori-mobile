@@ -2,7 +2,7 @@
 // Pure presentation: no business logic, no API calls.
 
 import { View, Text, TouchableOpacity } from 'react-native'
-import { ChevronRight, Banknote, Smartphone, AlertCircle, Receipt } from 'lucide-react-native'
+import { ChevronRight, Banknote, Smartphone, AlertCircle, Receipt, Clock } from 'lucide-react-native'
 import { useTheme } from '../../hooks/useTheme'
 import type { Sale } from '../../lib/types'
 import { formatCurrency, formatDate, formatTime } from '../../lib/formatters'
@@ -42,18 +42,31 @@ export function SaleRow({ sale, onPress }: Props) {
   const accent = PAYMENT_COLOR[sale.paymentMethod] ?? '#64748B'
   const methodLabel = PAYMENT_LABEL[sale.paymentMethod] ?? sale.paymentMethod
 
+  // Phase 16: pending_offline shows clock icon and amber left border
+  const isPendingOffline = sale.status === 'pending_offline'
+  const leftBorderColor = isPendingOffline ? '#F59E0B' : accent
+
   return (
     <TouchableOpacity
-      style={[styles.row, { backgroundColor: card, borderColor: border, borderLeftColor: accent }]}
+      style={[styles.row, { backgroundColor: card, borderColor: border, borderLeftColor: leftBorderColor }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <View style={styles.left}>
         <View style={[styles.icon, { backgroundColor: `${accent}20` }]}>
-          {getPaymentIcon(sale.paymentMethod, accent)}
+          {isPendingOffline
+            ? <Clock size={14} color="#F59E0B" />
+            : getPaymentIcon(sale.paymentMethod, accent)}
         </View>
         <View style={styles.info}>
-          <Text style={[styles.amount, { color: text }]}>{formatCurrency(sale.totalAmount)}</Text>
+          <View style={styles.amountRow}>
+            <Text style={[styles.amount, { color: text }]}>{formatCurrency(sale.totalAmount)}</Text>
+            {isPendingOffline && (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>Pending</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.meta, { color: textMuted }]} numberOfLines={1}>
             {methodLabel} &bull; {sale.items_summary ?? `${(sale.items ?? []).length} item${(sale.items ?? []).length !== 1 ? 's' : ''}`}
           </Text>
@@ -74,7 +87,10 @@ const styles = {
   left: { flexDirection: 'row' as const, alignItems: 'center' as const, flex: 1, gap: 10 },
   icon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center' as const, alignItems: 'center' as const },
   info: { flex: 1 },
+  amountRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   amount: { fontSize: 15, fontWeight: '800' as const },
+  pendingBadge: { backgroundColor: '#F59E0B20', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  pendingBadgeText: { color: '#F59E0B', fontSize: 9, fontWeight: '800' },
   meta: { fontSize: 11, marginTop: 2 },
   right: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   date: { fontSize: 11 },

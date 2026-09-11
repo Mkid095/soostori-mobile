@@ -1,24 +1,26 @@
 /**
- * mobile-sync-engine.ts — Phase 05 Real Sync Engine
- *
- * Real SyncEngine backed by the FIDScript InstantClient (`db`).
- * Replaces the NoOp stub so Mobile can push to cloud and pull from cloud.
+ * mobile-sync-engine.ts — Phase 16 Unified Sync Engine
  *
  * Responsibilities:
- *  - enqueue()  — uploads SyncEvent to FIDScript cloud
- *  - pull()     — queries FIDScript for events newer than `lastSyncAt`
- *  - apply()    — translates a cloud SyncEvent into a local SQLite upsert
+ *  - enqueue()   — write SyncEvent to local outbox, attempt immediate cloud upload
+ *  - pushOutbox() — flush all pending outbox events with retry + dead-letter
+ *  - pull()      — query cloud for new events
+ *  - apply()     — translate cloud SyncEvent into local SQLite upsert
  *
  * Business isolation: every event is scoped to `activeBusinessId` (shopId).
- * Idempotency: FIDScript transact is used so duplicates are handled at cloud level.
+ * Idempotency: INSERT OR REPLACE with idempotencyKey handles duplicates.
  */
-import { db, id } from '../lib/instant-client'
+import { db } from '../lib/instant-client'
 import { getDb } from '../lib/db'
 import { getCurrentShopId } from './session-helper'
+import { MAX_RETRIES } from './sync-retry-backoff'
+import { handlePushFailure, getOutboxCounts } from './sync-dead-letter'
+import { uploadEventToCloud } from './sync-upload'
+import { applySaleEvent, applyProductEvent, applyCustomerEvent, cloudEventToSyncEvent } from './sync-apply'
 import type { SyncEvent } from '@soostori/contracts'
 import type { SyncApplyResult } from '@soostori/contracts'
 
-// ── Local outbox (SQLite) ────────────────────────────────────────────────────
+// ── Schema ─────────────────────────────────────────────────────────────────
 
 const OUTBOX_TABLE = `
   CREATE TABLE IF NOT EXISTS sync_outbox (
@@ -30,67 +32,104 @@ const OUTBOX_TABLE = `
     idempotency_key TEXT NOT NULL,
     payload         TEXT NOT NULL,
     created_at      TEXT NOT NULL,
-    state           TEXT NOT NULL DEFAULT 'pending'
+    state           TEXT NOT NULL DEFAULT 'pending',
+    retry_count     INTEGER NOT NULL DEFAULT 0,
+    next_retry_at   INTEGER
+  )
+`
+
+const DEAD_LETTER_TABLE = `
+  CREATE TABLE IF NOT EXISTS sync_dead_letter (
+    id              TEXT PRIMARY KEY,
+    business_id     TEXT NOT NULL,
+    entity_kind     TEXT NOT NULL,
+    entity_id       TEXT NOT NULL,
+    operation       TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    payload         TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    failed_at       TEXT NOT NULL,
+    reason          TEXT
   )
 `
 
 export async function ensureOutboxTable(): Promise<void> {
   const database = await getDb()
   await database.runAsync(OUTBOX_TABLE)
+  await database.runAsync(DEAD_LETTER_TABLE)
 }
 
-// ── Push path ────────────────────────────────────────────────────────────────
+// ── Enqueue ────────────────────────────────────────────────────────────────
 
 /**
- * enqueue — upload one event to FIDScript cloud immediately.
- * Called by createProduct/createSale after local SQLite INSERT succeeds.
- * The local outbox is also updated so pushOutbox() can recover on failure.
+ * enqueue — write event to local outbox (survives crashes).
+ * Always writes state='pending' so pushOutbox() can flush it.
+ * Upload to cloud is attempted inline; if it fails the event stays
+ * 'pending' and will be retried by pushOutbox().
  */
 export async function enqueue(
   event: SyncEvent,
 ): Promise<{ state: 'queued' | 'acked' | 'rejected' }> {
   try {
     const database = await getDb()
-
-    // Persist to local outbox first (survives crashes)
     await database.runAsync(
       `INSERT OR REPLACE INTO sync_outbox
-         (id, business_id, entity_kind, entity_id, operation, idempotency_key, payload, created_at, state)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'acked')`,
+         (id, business_id, entity_kind, entity_id, operation, idempotency_key, payload, created_at, state, retry_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)`,
       [
-        event.id,
-        event.businessId,
-        event.entityKind,
-        event.entityId,
-        event.operation,
-        event.idempotencyKey,
-        JSON.stringify(event.payload),
-        event.clientCreatedAt,
+        event.id, event.businessId, event.entityKind, event.entityId,
+        event.operation, event.idempotencyKey,
+        JSON.stringify(event.payload), event.clientCreatedAt,
       ],
     )
-
-    // Upload to FIDScript cloud
-    await uploadEventToCloud(event)
-    return { state: 'acked' }
+    try {
+      await uploadEventToCloud(event)
+      await database.runAsync(
+        `UPDATE sync_outbox SET state = 'acked' WHERE id = ?`,
+        [event.id],
+      )
+      return { state: 'acked' }
+    } catch {
+      return { state: 'queued' }
+    }
   } catch (err) {
     console.error('[MobileSyncEngine] enqueue failed:', err)
     return { state: 'rejected' }
   }
 }
 
+// ── Push ──────────────────────────────────────────────────────────────────
+
 /**
- * pushOutbox — flush all pending local outbox events to cloud.
- * Called by sync service on startup and on network reconnect.
+ * pushOutbox — flush pending outbox events to cloud with retry + dead-letter.
+ * Implements in_flight state to prevent duplicate pushes.
+ * After MAX_RETRIES, moves event to sync_dead_letter.
  */
 export async function pushOutbox(): Promise<{ pushed: number; failed: number }> {
   const database = await getDb()
+  const now = Date.now()
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: any[] = await database.getAllAsync(
-    `SELECT * FROM sync_outbox WHERE state = 'pending' ORDER BY created_at ASC`,
+    `SELECT * FROM sync_outbox
+     WHERE state IN ('pending', 'in_flight')
+       AND (next_retry_at IS NULL OR next_retry_at <= ?)
+     ORDER BY created_at ASC`,
+    [now],
   )
 
   let pushed = 0, failed = 0
   for (const row of rows) {
+    // Mark in_flight immediately so concurrent pushes can't duplicate
+    await database.runAsync(
+      `UPDATE sync_outbox SET state = 'in_flight' WHERE id = ? AND state = 'pending'`,
+      [row.id],
+    )
+    const current = await database.getFirstAsync<{ state: string }>(
+      `SELECT state FROM sync_outbox WHERE id = ?`, [row.id],
+    )
+    if (current?.state !== 'in_flight') continue
+
     try {
       const event: SyncEvent = {
         id: row.id,
@@ -113,44 +152,37 @@ export async function pushOutbox(): Promise<{ pushed: number; failed: number }> 
         [row.id],
       )
       pushed++
-    } catch {
+    } catch (err) {
+      await handlePushFailure(row, err)
       failed++
     }
   }
   return { pushed, failed }
 }
 
-// ── Pull path ───────────────────────────────────────────────────────────────
+// ── Pull ──────────────────────────────────────────────────────────────────
 
 export interface PullResult {
   events: SyncEvent[]
-  cursor: string // ISO timestamp
+  cursor: string
 }
 
 /**
- * pull — query FIDScript for sync events where:
- *   - shopId matches the current business
- *   - syncedAt > lastSyncAt
- *
- * InstantDB doesn't support GT on string fields, so we fetch all events
- * for the shop and filter in-memory. Cursor is the max syncedAt seen.
+ * pull — query cloud for events newer than lastSyncAt.
+ * InstantDB doesn't support GT on strings, so we filter in-memory.
  */
 export async function pull(lastSyncAt: string | null): Promise<PullResult> {
   const shopId = await getCurrentShopId()
   if (!shopId) return { events: [], cursor: lastSyncAt ?? new Date().toISOString() }
 
-  // Fetch all events for this shop (InstantDB doesn't support string GT)
   const result = await db.queryOnce({
-    syncEvents: {
-      $: { where: { shopId } },
-    },
+    syncEvents: { $: { where: { shopId } } },
   })
 
   const rawEvents =
     (result.data.syncEvents as Array<Record<string, unknown>>) ?? []
   const since = lastSyncAt ?? ''
 
-  // Filter to events newer than `since`, deduplicate by idempotencyKey
   const seen = new Set<string>()
   const filtered = rawEvents.filter(cev => {
     const ts = String(cev.syncedAt ?? cev.timestamp ?? '')
@@ -161,7 +193,6 @@ export async function pull(lastSyncAt: string | null): Promise<PullResult> {
     return true
   })
 
-  // Sort by timestamp ascending (oldest first)
   filtered.sort((a, b) =>
     String(a.syncedAt ?? a.timestamp ?? '').localeCompare(
       String(b.syncedAt ?? b.timestamp ?? ''),
@@ -171,218 +202,27 @@ export async function pull(lastSyncAt: string | null): Promise<PullResult> {
   const events = filtered.map(cev => cloudEventToSyncEvent(cev, shopId))
   const cursor =
     filtered.length > 0
-      ? String(filtered[filtered.length - 1].syncedAt ?? filtered[filtered.length - 1].timestamp ?? new Date().toISOString())
+      ? String(filtered[filtered.length - 1].syncedAt
+          ?? filtered[filtered.length - 1].timestamp
+          ?? new Date().toISOString())
       : (lastSyncAt ?? new Date().toISOString())
 
   return { events, cursor }
 }
 
-// ── Apply path ──────────────────────────────────────────────────────────────
+// ── Apply ─────────────────────────────────────────────────────────────────
 
-/**
- * apply — translate a cloud SyncEvent into a local SQLite upsert.
- * Business isolation: events with mismatched `businessId` are silently no-op.
- *
- * Supported entity kinds: 'product', 'sale'
- */
 export async function apply(
   _local: unknown,
   event: SyncEvent,
   shopId: string,
 ): Promise<SyncApplyResult> {
   if (event.businessId !== shopId) return { state: 'no_op' }
-
   const database = await getDb()
 
-  if (event.entityKind === 'product') {
-    return applyProductEvent(database, event)
-  }
-  if (event.entityKind === 'sale') {
-    return applySaleEvent(database, event)
-  }
-  if (event.entityKind === 'customer') {
-    return applyCustomerEvent(database, event)
-  }
+  if (event.entityKind === 'product') return applyProductEvent(database, event)
+  if (event.entityKind === 'sale')    return applySaleEvent(database, event)
+  if (event.entityKind === 'customer') return applyCustomerEvent(database, event)
 
   return { state: 'no_op' }
-}
-
-function applyProductEvent(
-  database: Awaited<ReturnType<typeof getDb>>,
-  event: SyncEvent,
-): SyncApplyResult {
-  const p = event.payload as Record<string, unknown>
-
-  if (event.operation === 'create' || event.operation === 'update') {
-    database.runAsync(
-      `INSERT OR REPLACE INTO products
-         (id, shop_id, name, sku, barcode, cost_price, selling_price, discount_price,
-          unit, stock_quantity, low_stock_threshold, track_inventory, allow_single_unit_sale,
-          distributor_name, distributor_phone, image_url, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.entityId,
-        event.businessId,
-        String(p.name ?? ''),
-        p.sku != null ? String(p.sku) : null,
-        p.barcode != null ? String(p.barcode) : null,
-        Number(p.costPrice ?? 0),
-        Number(p.sellingPrice ?? 0),
-        p.discountPrice != null ? Number(p.discountPrice) : null,
-        String(p.unit ?? 'unit'),
-        Number(p.stockQuantity ?? 0),
-        Number(p.lowStockThreshold ?? 0),
-        p.trackInventory ? 1 : 0,
-        p.allowSingleUnitSale ? 1 : 0,
-        p.distributorName != null ? String(p.distributorName) : null,
-        p.distributorPhone != null ? String(p.distributorPhone) : null,
-        p.image != null ? String(p.image) : null,
-        p.isActive !== false ? 1 : 0,
-        String(p.createdAt ?? event.clientCreatedAt),
-        String(p.updatedAt ?? event.clientCreatedAt),
-      ],
-    )
-    return { state: 'applied', entityVersion: event.entityVersion }
-  }
-
-  if (event.operation === 'delete' || event.operation === 'tombstone') {
-    database.runAsync(`DELETE FROM products WHERE id = ?`, [event.entityId])
-    return { state: 'applied', entityVersion: event.entityVersion }
-  }
-
-  return { state: 'no_op' }
-}
-
-function applySaleEvent(
-  database: Awaited<ReturnType<typeof getDb>>,
-  event: SyncEvent,
-): SyncApplyResult {
-  const p = event.payload as Record<string, unknown>
-
-  if (event.operation === 'create') {
-    const itemsJson = Array.isArray(p.items) ? JSON.stringify(p.items) : '[]'
-    database.runAsync(
-      `INSERT OR REPLACE INTO sales
-         (id, shop_id, type, status, subtotal, discount_amount, total_amount,
-          paid_amount, payment_method, note, customer_id_number, items, items_summary,
-          created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.entityId,
-        event.businessId,
-        String(p.type ?? 'retail'),
-        String(p.status ?? 'completed'),
-        Number(p.subtotal ?? 0),
-        Number(p.discountAmount ?? 0),
-        Number(p.totalAmount ?? 0),
-        Number(p.paidAmount ?? p.totalAmount ?? 0),
-        String(p.paymentMethod ?? 'cash'),
-        p.note != null ? String(p.note) : null,
-        // customer_id_number: sale references customer by id_number (plain text),
-        // not by FK. This means the sale is valid even if the customer hasn't synced yet.
-        p.customerId != null ? String(p.customerId) : null,
-        itemsJson,
-        `${Array.isArray(p.items) ? p.items.length : 0} items`,
-        String(p.createdAt ?? event.clientCreatedAt),
-        String(p.updatedAt ?? event.clientCreatedAt),
-      ],
-    )
-    return { state: 'applied', entityVersion: event.entityVersion }
-  }
-
-  return { state: 'no_op' }
-}
-
-// ── Customer replay ───────────────────────────────────────────────────────────
-
-/**
- * applyCustomerEvent — replay a cloud customer event to local SQLite.
- *
- * Idempotency (Phase 10 critical invariant):
- *   - idempotencyKey = customer.id
- *   - INSERT OR REPLACE means a replay of an already-applied event
- *     (same idempotencyKey) overwrites with identical data — no new row,
- *     no duplicate.
- *   - Tombstone sets is_active = 0 (soft delete — preserve referential integrity
- *     for any sales that reference this customer by id_number).
- */
-function applyCustomerEvent(
-  database: Awaited<ReturnType<typeof getDb>>,
-  event: SyncEvent,
-): SyncApplyResult {
-  const p = event.payload as Record<string, unknown>
-
-  if (event.operation === 'create' || event.operation === 'update') {
-    database.runAsync(
-      `INSERT OR REPLACE INTO customers
-         (id, name, phone, id_number, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.entityId,
-        String(p.name ?? ''),
-        p.phone != null ? String(p.phone) : null,
-        p.idNumber != null ? String(p.idNumber) : null,
-        // Canonical Customer.status = 'inactive' | 'blacklisted' → is_active = 0
-        p.status === 'inactive' || p.status === 'blacklisted' ? 0 : 1,
-        String(p.createdAt ?? event.clientCreatedAt),
-        String(p.updatedAt ?? event.clientCreatedAt),
-      ],
-    )
-    return { state: 'applied', entityVersion: event.entityVersion }
-  }
-
-  if (event.operation === 'tombstone' || event.operation === 'delete') {
-    // Soft-delete to preserve sale references
-    database.runAsync(
-      `UPDATE customers SET is_active = 0, updated_at = ? WHERE id = ?`,
-      [new Date().toISOString(), event.entityId],
-    )
-    return { state: 'applied', entityVersion: event.entityVersion }
-  }
-
-  return { state: 'no_op' }
-}
-
-// ── FIDScript helpers ────────────────────────────────────────────────────────
-
-async function uploadEventToCloud(event: SyncEvent): Promise<void> {
-  const now = new Date().toISOString()
-  await db.transact([
-    db.tx.syncEvents[id()].create({
-      id: event.id,
-      shopId: event.businessId,
-      entityId: event.entityId,
-      entity: event.entityKind,
-      operation: event.operation,
-      payload: event.payload,
-      syncedAt: now,
-      version: event.entityVersion,
-      idempotencyKey: event.idempotencyKey,
-      timestamp: event.clientCreatedAt,
-      sequenceNumber: event.clientSequence,
-      deviceId: event.originatingDeviceId,
-    }),
-  ])
-}
-
-function cloudEventToSyncEvent(
-  cev: Record<string, unknown>,
-  shopId: string,
-): SyncEvent {
-  const payload = cev.payload as Record<string, unknown> | undefined
-  return {
-    id: String(cev.id ?? ''),
-    idempotencyKey: String(cev.idempotencyKey ?? cev.id ?? ''),
-    businessId: String(cev.shopId ?? shopId),
-    entityKind: String(cev.entity ?? '') as SyncEvent['entityKind'],
-    entityId: String(cev.entityId ?? ''),
-    operation: String(cev.operation ?? '') as SyncEvent['operation'],
-    originatingDeviceId: String(cev.deviceId ?? 'cloud'),
-    originatingEmployeeId: 'cloud',
-    clientSequence: Number(cev.sequenceNumber ?? 0),
-    clientCreatedAt: String(cev.timestamp ?? cev.syncedAt ?? new Date().toISOString()),
-    entityVersion: Number(cev.version ?? 1),
-    payload: payload ?? {},
-    state: 'pending',
-  }
 }

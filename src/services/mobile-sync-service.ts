@@ -19,6 +19,7 @@ import {
   apply as realApply,
   pushOutbox,
 } from './mobile-sync-engine'
+import { getOutboxCounts, getDeadLetterCount } from './sync-dead-letter'
 import { getCurrentShopId } from './session-helper'
 import {
   defaultSyncEngine as NoOpEngine,
@@ -28,6 +29,7 @@ import {
 // ── Sync cursor ──────────────────────────────────────────────────────────────
 
 const CURSOR_KEY = '@soostori:mobileSyncCursor'
+const LAST_SYNC_KEY = '@soostori:lastSyncAt'
 
 export async function getSyncCursor(): Promise<string | null> {
   return AsyncStorage.getItem(CURSOR_KEY)
@@ -35,6 +37,11 @@ export async function getSyncCursor(): Promise<string | null> {
 
 export async function setSyncCursor(ts: string): Promise<void> {
   await AsyncStorage.setItem(CURSOR_KEY, ts)
+}
+
+export async function getLastSyncAt(): Promise<Date | null> {
+  const v = await AsyncStorage.getItem(LAST_SYNC_KEY)
+  return v ? new Date(v) : null
 }
 
 // ── Inject real engine into defaultSyncEngine ──────────────────────────────────
@@ -83,7 +90,10 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
     if (result.state === 'applied') applied++
   }
 
-  if (cursor) await setSyncCursor(cursor)
+  if (cursor) {
+    await setSyncCursor(cursor)
+    await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString())
+  }
   return { pulled: events.length, applied }
 }
 
@@ -117,11 +127,14 @@ export function startSyncListeners(): void {
     async (state: AppStateStatus) => {
       if (state === 'active') {
         await triggerSync()
+      } else if (state === 'background' || state === 'inactive') {
+        // Phase 16: flush outbox before app suspends so events are sent
+        await pushOutbox()
       }
     },
   )
 
-  // NetInfo: isConnected=true + was offline → push + pull
+  // NetInfo: isConnected=true + was offline → triggerSync (which calls pushOutbox internally)
   netInfoSubscription = NetInfo.addEventListener(state => {
     const online = state.isConnected && state.isInternetReachable !== false
     if (online && wasOffline) {
@@ -139,15 +152,53 @@ export function startSyncListeners(): void {
 export function stopSyncListeners(): void {
   appStateSubscription?.remove()
   appStateSubscription = null
-  netInfoSubscription?.remove()
+  netInfoSubscription?.()
   netInfoSubscription = null
 }
 
+/**
+ * onNetworkReconnect — called when network transitions offline → online.
+ * Phase 16: calls ONLY triggerSync() which calls pushOutbox() + pullAndApply().
+ * The duplicate pushOutbox() call that existed before Phase 16 has been removed.
+ */
 async function onNetworkReconnect(): Promise<void> {
   try {
-    await pushOutbox()
     await triggerSync()
   } catch (err) {
     console.warn('[MobileSyncService] onNetworkReconnect failed:', err)
+  }
+}
+
+// ── Sync status (Phase 16) ──────────────────────────────────────────────────
+
+export interface SyncStatus {
+  pending: number
+  failed: number
+  deadLetter: number
+  lastSyncAt: Date | null
+  isOnline: boolean
+}
+
+let cachedOnline = true
+
+NetInfo.addEventListener(state => {
+  cachedOnline = !!(state.isConnected && state.isInternetReachable !== false)
+})
+
+/**
+ * getSyncStatus — returns current sync state for UI display.
+ */
+export async function getSyncStatus(): Promise<SyncStatus> {
+  const [counts, deadLetterCount, lastSyncAt] = await Promise.all([
+    getOutboxCounts(),
+    getDeadLetterCount(),
+    getLastSyncAt(),
+  ])
+  return {
+    pending: counts.pending,
+    failed: counts.failed + deadLetterCount,
+    deadLetter: deadLetterCount,
+    lastSyncAt,
+    isOnline: cachedOnline,
   }
 }

@@ -46,7 +46,7 @@ export interface Category {
 export interface Sale {
   id: string
   type: 'retail' | 'wholesale' | 'order'
-  status: 'pending' | 'completed' | 'cancelled' | 'refunded'
+  status: 'pending' | 'pending_offline' | 'completed' | 'cancelled' | 'refunded'
   subtotal: number
   discountAmount: number
   totalAmount: number

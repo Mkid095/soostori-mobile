@@ -1,9 +1,10 @@
 // SaleDetailModal — full receipt view for a single sale transaction
 // Phase 10: added RefundModal integration
+// Phase 16: added Retry Sync button for pending_offline sales
 
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, Alert, StyleSheet } from 'react-native'
-import { X, Printer, Share2, RotateCcw } from 'lucide-react-native'
+import { X, Printer, Share2, RotateCcw, RefreshCw } from 'lucide-react-native'
 import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import { useTheme } from '../../hooks/useTheme'
@@ -14,6 +15,7 @@ import { SaleMetaCard } from './sale-meta-card'
 import { SaleItemsCard } from './sale-items-card'
 import { SaleTotalsCard } from './sale-totals-card'
 import { RefundModal } from './refund-modal'
+import { triggerSync } from '../../services/mobile-sync-service'
 
 interface Props {
   sale: Sale | null
@@ -21,13 +23,32 @@ interface Props {
   onClose: () => void
 }
 
+const RETRY_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+
 export function SaleDetailModal({ sale, visible, onClose }: Props) {
   const { bg, text, border, brand } = useTheme()
   const [printing, setPrinting] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [showRefund, setShowRefund] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   if (!sale) return null
+
+  const isPendingOffline = sale.status === 'pending_offline'
+  const canRetrySync = isPendingOffline &&
+    Date.now() - new Date(sale.createdAt).getTime() > RETRY_THRESHOLD_MS
+
+  async function handleRetrySync() {
+    setRetrying(true)
+    try {
+      await triggerSync()
+      Alert.alert('Sync Retried', 'Your sale is being synced. Please check back shortly.')
+    } catch {
+      Alert.alert('Sync Failed', 'Could not retry sync. Please check your connection.')
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   async function handlePrint() {
     if (!sale) return
@@ -97,6 +118,18 @@ export function SaleDetailModal({ sale, visible, onClose }: Props) {
 
         {/* Actions */}
         <View style={[styles.footer, { borderTopColor: border }]}>
+          {canRetrySync && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B' }]}
+              onPress={handleRetrySync}
+              disabled={retrying}
+            >
+              <RefreshCw size={16} color="#F59E0B" />
+              <Text style={[styles.actionBtnText, { color: '#F59E0B' }]}>
+                {retrying ? 'Retrying...' : 'Retry Sync'}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: bg, borderColor: border }]}
             onPress={handleShare}
