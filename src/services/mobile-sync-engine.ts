@@ -53,10 +53,22 @@ const DEAD_LETTER_TABLE = `
   )
 `
 
+const PROCESSED_TABLE = `
+  CREATE TABLE IF NOT EXISTS sync_processed (
+    idempotency_key TEXT PRIMARY KEY,
+    business_id     TEXT NOT NULL,
+    entity_kind     TEXT NOT NULL,
+    entity_id       TEXT NOT NULL,
+    operation       TEXT NOT NULL,
+    applied_at      TEXT NOT NULL
+  )
+`
+
 export async function ensureOutboxTable(): Promise<void> {
   const database = await getDb()
   await database.runAsync(OUTBOX_TABLE)
   await database.runAsync(DEAD_LETTER_TABLE)
+  await database.runAsync(PROCESSED_TABLE)
 }
 
 // ── Enqueue ────────────────────────────────────────────────────────────────

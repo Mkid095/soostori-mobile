@@ -1,14 +1,29 @@
 // sync-apply-sale.ts — Phase 16: apply sale SyncEvent to local SQLite
 
 import { getDb } from '../lib/db'
+import { createConflict } from './db-conflicts'
 import type { SyncEvent } from '@soostori/contracts'
 import type { SyncApplyResult } from '@soostori/contracts'
+import type { SaleReconciliationRequiredPayload } from '../lib/sync-protocol'
 
 export async function applySaleEvent(
   database: Awaited<ReturnType<typeof getDb>>,
   event: SyncEvent,
 ): Promise<SyncApplyResult> {
   const p = event.payload as Record<string, unknown>
+
+  // SALE_RECONCILIATION_REQUIRED events are conflicts — write to sync_conflicts, not sales table
+  if (event.operation === 'reconciliation_required') {
+    const reconciliationPayload = p as unknown as SaleReconciliationRequiredPayload
+    await createConflict(
+      event.businessId,
+      reconciliationPayload.saleId,
+      reconciliationPayload.deviceId,
+      'SALE_RECONCILIATION_REQUIRED',
+      JSON.stringify(reconciliationPayload),
+    )
+    return { state: 'applied', entityVersion: event.entityVersion }
+  }
 
   if (event.operation === 'create') {
     const itemsJson = Array.isArray(p.items) ? JSON.stringify(p.items) : '[]'

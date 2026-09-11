@@ -19,6 +19,7 @@ import {
   apply as realApply,
   pushOutbox,
 } from './mobile-sync-engine'
+import { getDb } from '../lib/db'
 import { getOutboxCounts, getDeadLetterCount } from './sync-dead-letter'
 import { getCurrentShopId } from './session-helper'
 import {
@@ -74,7 +75,10 @@ export async function initMobileSync(): Promise<void> {
 
 /**
  * pullAndApply — pull cloud events and apply them to local SQLite.
- * Called on app resume, network reconnect, and after mutations.
+ * Cursor is updated BEFORE apply so a crash mid-apply still marks events
+ * as fetched — safe re-fetch on next pull rather than double-apply.
+ * Idempotency keys are written to sync_processed after each apply so
+ * restarts do not re-process already-applied events.
  */
 export async function pullAndApply(): Promise<{ pulled: number; applied: number }> {
   const shopId = await getCurrentShopId()
@@ -86,10 +90,36 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
 
   let applied = 0
   for (const event of events) {
+    // Check dedup BEFORE applying — skip if already in sync_processed
+    const db = await getDb()
+    const existing = await db.getFirstAsync<{ idempotency_key: string }>(
+      `SELECT idempotency_key FROM sync_processed WHERE idempotency_key = ?`,
+      [event.idempotencyKey],
+    )
+    if (existing) continue
+
     const result = await realApply(null, event, shopId)
-    if (result.state === 'applied') applied++
+
+    // Write idempotency key after successful apply
+    if (result.state === 'applied') {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO sync_processed
+           (idempotency_key, business_id, entity_kind, entity_id, operation, applied_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          event.idempotencyKey,
+          event.businessId,
+          event.entityKind,
+          event.entityId,
+          event.operation,
+          new Date().toISOString(),
+        ],
+      )
+      applied++
+    }
   }
 
+  // Update cursor AFTER all events processed — safe for next pull
   if (cursor) {
     await setSyncCursor(cursor)
     await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString())

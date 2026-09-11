@@ -1,6 +1,7 @@
 // sync-apply-product.ts — Phase 16: apply product SyncEvent to local SQLite
 
 import { getDb } from '../lib/db'
+import { createConflict } from './db-conflicts'
 import type { SyncEvent } from '@soostori/contracts'
 import type { SyncApplyResult } from '@soostori/contracts'
 
@@ -11,6 +12,23 @@ export async function applyProductEvent(
   const p = event.payload as Record<string, unknown>
 
   if (event.operation === 'create' || event.operation === 'update') {
+    // Check for STALE_VERSION: if local record has a higher entityVersion, skip
+    const localRow = await database.getFirstAsync<{ id: string; updated_at: string }>(
+      `SELECT id, updated_at FROM products WHERE id = ?`,
+      [event.entityId],
+    )
+    if (localRow && event.entityVersion < (Number(p._localVersion ?? 0) || 0)) {
+      // Incoming version is older than local — record conflict and skip apply
+      await createConflict(
+        event.businessId,
+        event.entityId,
+        event.originatingDeviceId,
+        'STALE_VERSION',
+        JSON.stringify({ eventVersion: event.entityVersion, localVersion: p._localVersion, event }),
+      )
+      return { state: 'no_op', entityVersion: event.entityVersion }
+    }
+
     database.runAsync(
       `INSERT OR REPLACE INTO products
          (id, shop_id, name, sku, barcode, cost_price, selling_price, discount_price,
