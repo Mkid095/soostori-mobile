@@ -1,8 +1,11 @@
 // mpesa-service.ts — M-Pesa STK Push public API
 // Phase 18: refactored (PayHero client moved to mpesa-payhero-client.ts, types to mpesa-types.ts)
+// Phase 19: handleStkCallback records mpesa_receipt_number to audit_logs on completion
 import { getDb } from '../lib/db'
 import { payHeroRequestStkPush, payHeroQueryStkStatus } from './mpesa-payhero-client'
 import type { StkPushRequest, StkPushResponse, StkPaymentStatus } from './mpesa-types'
+import { logAudit } from './db-audit'
+import { getCurrentShopId } from './session-helper'
 
 // ─── SQLite state helpers ────────────────────────────────────────────────────
 
@@ -105,6 +108,9 @@ export async function handleStkCallback(payload: {
   checkoutRequestId: string
   resultCode: number
   receiptNumber?: string
+  amount?: number
+  customerPhone?: string
+  timestamp?: string
 }): Promise<void> {
   await initStkPushTable()
   const db = await getDb()
@@ -113,4 +119,26 @@ export async function handleStkCallback(payload: {
     `UPDATE stk_push_state SET status = ?, receipt_number = ?, completed_at = ? WHERE checkout_request_id = ?`,
     [status, payload.receiptNumber ?? null, new Date().toISOString(), payload.checkoutRequestId],
   )
+
+  // Phase 19: Record M-Pesa receipt to audit log on successful completion
+  if (status === 'completed' && payload.receiptNumber) {
+    const shopId = await getCurrentShopId()
+    if (shopId) {
+      logAudit(
+        shopId,
+        'mpesa_receipt_issued',
+        'mpesa_payment',
+        payload.checkoutRequestId,
+        undefined,
+        undefined,
+        undefined,
+        JSON.stringify({
+          receiptNumber: payload.receiptNumber,
+          amount: payload.amount,
+          customerPhone: payload.customerPhone,
+          paidAt: payload.timestamp,
+        }),
+      ).catch(() => {})
+    }
+  }
 }

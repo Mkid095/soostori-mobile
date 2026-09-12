@@ -78,18 +78,31 @@ export async function initMobileSync(): Promise<void> {
 
 /**
  * pullAndApply — pull cloud events and apply them to local SQLite.
+ * Phase 19: Enforces subscription status before applying any cloud events.
+ * Phase 19: Checks offline policy before sync.
  * Cursor is updated BEFORE apply so a crash mid-apply still marks events
  * as fetched — safe re-fetch on next pull rather than double-apply.
  * Idempotency keys are written to sync_processed after each apply so
  * restarts do not re-process already-applied events.
  */
 export async function pullAndApply(): Promise<{ pulled: number; applied: number }> {
+  // Phase 19: Enforce subscription status before applying cloud events
+  const { enforceSubscriptionForSync } = await import('./subscription-enforcer')
+  await enforceSubscriptionForSync()
+
+  // Phase 19: Check offline policy at start of sync cycle
+  const { offlinePolicyService, checkAndRecordOnline } = await import('./offline-policy-service')
+  await offlinePolicyService.checkPolicy()
+
   const shopId = await getCurrentShopId()
   if (!shopId) return { pulled: 0, applied: 0 }
 
   const lastSyncAt = await getSyncCursor()
   const { events, cursor } = await realPull(lastSyncAt)
-  if (events.length === 0) return { pulled: 0, applied: 0 }
+  if (events.length === 0) {
+    await checkAndRecordOnline()
+    return { pulled: 0, applied: 0 }
+  }
 
   let applied = 0
   for (const event of events) {
@@ -127,14 +140,19 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
     await setSyncCursor(cursor)
     await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString())
   }
+  // Phase 19: record online after successful sync cycle
+  const { checkAndRecordOnline } = await import('./offline-policy-service')
+  await checkAndRecordOnline()
   return { pulled: events.length, applied }
 }
 
 /**
  * triggerSync — push local outbox then pull cloud changes.
  * Called after every local mutation (createProduct, createSale).
+ * Phase 19: skips if sync is paused due to subscription or offline policy.
  */
 export async function triggerSync(): Promise<void> {
+  if (syncPaused) return
   try {
     await pushOutbox()
     await pullAndApply()
@@ -187,6 +205,23 @@ export function stopSyncListeners(): void {
   appStateSubscription = null
   netInfoSubscription?.()
   netInfoSubscription = null
+}
+
+// ── Pause / Resume (Phase 19: used by offline policy and subscription enforcer) ───
+
+let syncPaused = false
+
+export function isSyncPaused(): boolean {
+  return syncPaused
+}
+
+export async function pauseSync(): Promise<void> {
+  syncPaused = true
+}
+
+export async function resumeSync(): Promise<void> {
+  syncPaused = false
+  await triggerSync()
 }
 
 /**

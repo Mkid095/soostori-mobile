@@ -1,7 +1,6 @@
 // root-layout-content.tsx — Auth gate + device recovery for RootLayout
 import { useEffect, useState } from 'react'
-import { View, Text, ActivityIndicator } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -21,8 +20,9 @@ import { getDb } from '../../lib/db'
 import { initMobileSync, startSyncListeners, stopSyncListeners } from '../../services/mobile-sync-service'
 import { BusinessSwitcherHost } from './BusinessSwitcherHost'
 import { getCurrentSubscription, revalidateSubscription } from '../../services/subscription-guard'
+import { offlinePolicyService, type OfflinePhase } from '../../services/offline-policy-service'
 
-type AuthState = 'loading' | 'welcome' | 'auth' | 'app' | 'blocked'
+type AuthState = 'loading' | 'welcome' | 'auth' | 'app' | 'blocked' | 'offline-blocked'
 
 function RootLoading() {
   return (
@@ -47,10 +47,49 @@ function SubscriptionBlockedFallback() {
   return <Screen />
 }
 
+// Phase 19: Offline warning banner — shown at day 3 of offline operation
+function OfflineWarningBanner({ phase, daysOffline }: { phase: OfflinePhase; daysOffline: number }) {
+  if (phase !== 'OFFLINE_WARNING') return null
+  return (
+    <View style={{ backgroundColor: '#F59E0B', paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', flex: 1 }}>
+        Day {daysOffline} offline — connect to internet soon to avoid service interruption
+      </Text>
+      <TouchableOpacity onPress={() => {}}>
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>×</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+// Phase 19: Full-screen offline blocked gate
+function OfflineBlockedFallback() {
+  const router = useRouter()
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 32 }}>
+      <Text style={{ fontSize: 48, marginBottom: 16 }}>📡</Text>
+      <Text style={{ fontSize: 22, fontWeight: '900', color: '#EF4444', textAlign: 'center', marginBottom: 8 }}>
+        Connection Required
+      </Text>
+      <Text style={{ fontSize: 15, color: '#64748b', textAlign: 'center', marginBottom: 24 }}>
+        Your device has been offline for more than 3 days.{'\n'}Please connect to the internet to continue using Soostori.
+      </Text>
+      <TouchableOpacity
+        style={{ backgroundColor: '#f97316', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 10 }}
+        onPress={() => { router.replace('/' as any) }}
+      >
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
 export function RootLayoutContent() {
   const [dbReady, setDbReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [authState, setAuthState] = useState<AuthState>('loading')
+  const [offlinePhase, setOfflinePhase] = useState<OfflinePhase>('ONLINE')
+  const [offlineDays, setOfflineDays] = useState(0)
 
   useCloudSync()
   useDeviceHeartbeat()
@@ -94,6 +133,15 @@ export function RootLayoutContent() {
           return
         }
 
+        // Phase 19: check offline policy — block if limit exceeded
+        const policy = await offlinePolicyService.checkPolicy()
+        setOfflinePhase(policy.phase)
+        setOfflineDays(policy.daysOffline)
+        if (policy.phase === 'OFFLINE_LIMIT_EXCEEDED') {
+          setAuthState('offline-blocked')
+          return
+        }
+
         setAuthState((await isWithinGraceWindow()) && session.employeeId ? 'app' : 'auth')
       })
       .catch((e: unknown) => setError(String(e)))
@@ -102,6 +150,7 @@ export function RootLayoutContent() {
   if (error) return <RootError msg={error} />
   if (!dbReady || authState === 'loading') return <RootLoading />
   if (authState === 'blocked') return <SubscriptionBlockedFallback />
+  if (authState === 'offline-blocked') return <OfflineBlockedFallback />
 
   return (
     <QueryClientProvider client={getQueryClient()}>
@@ -110,6 +159,8 @@ export function RootLayoutContent() {
           <BusinessProvider>
             <StatusBar style="dark" />
             <UpdateBanner />
+            {/* Phase 19: OFFLINE_WARNING banner at day 3 */}
+            <OfflineWarningBanner phase={offlinePhase} daysOffline={offlineDays} />
             <Stack screenOptions={{ headerShown: false }}>
               {authState === 'welcome' && <Stack.Screen name="welcome" options={{ animation: 'fade' }} />}
               {authState === 'auth' && <Stack.Screen name="auth" options={{ animation: 'fade' }} />}

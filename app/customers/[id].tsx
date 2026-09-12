@@ -1,183 +1,146 @@
-// app/customers/[id].tsx — Customer detail: info + debt history
-// Phase 11
-
-import { useState, useEffect, useCallback, type ListRenderItemInfo } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+// app/customers/[id].tsx — Phase 19: customer detail screen
+// Tabs: Purchase History | Debt History | Notes
+import { useState } from 'react'
+import {
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, ActivityIndicator,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ArrowLeft, Phone, Mail, AlertCircle } from 'lucide-react-native'
+import { ArrowLeft, User, Phone, Mail, Calendar } from 'lucide-react-native'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useTheme } from '../../src/hooks/useTheme'
-import type { Customer, Debt } from '../../src/lib/types'
-import { getCustomerById } from '../../src/services/db-customers'
-import { getDebtsByCustomer, getDebtById } from '../../src/services/db-debts'
+import { useCustomerDetail } from '../../src/hooks/useCustomerDetail'
 import { formatCurrency, formatDate } from '../../src/lib/formatters'
-import { DebtDetailModal } from '../../src/components/shared/debt-detail-modal'
-import { DebtPartialPaymentModal } from '../../src/components/shared/debt-partial-payment-modal'
+import { PurchaseHistory } from './_components/purchase-history'
+import { DebtHistory } from './_components/debt-history'
+import { NotesTab } from './_components/notes-tab'
 
-const STATUS_COLORS = { pending: '#F59E0B', partial: '#3B82F6', paid: '#10B981' } as const
-
-function DebtRow({ debt, onPress, onRecordPayment }: {
-  debt: Debt
-  onPress: (d: Debt) => void
-  onRecordPayment: (d: Debt) => void
-}) {
-  const { card, text, textSecondary: textMuted, border } = useTheme()
-  const balance = debt.amount - debt.amountPaid
-  const statusColor = STATUS_COLORS[debt.status] || STATUS_COLORS.pending
-
-  return (
-    <TouchableOpacity
-      style={{ backgroundColor: card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: border, borderLeftWidth: 4, borderLeftColor: statusColor }}
-      onPress={() => onPress(debt)}
-      activeOpacity={0.7}
-    >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 11, color: textMuted, marginTop: 2 }}>{formatDate(debt.createdAt)}</Text>
-          {debt.notes && <Text style={{ fontSize: 12, color: textMuted, marginTop: 2 }} numberOfLines={1}>{debt.notes}</Text>}
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
-            <Text style={{ fontSize: 12, color: textMuted }}>Total: <Text style={{ color: text, fontWeight: '700' }}>{formatCurrency(debt.amount)}</Text></Text>
-            <Text style={{ fontSize: 12, color: textMuted }}>Paid: <Text style={{ color: '#10B981', fontWeight: '700' }}>{formatCurrency(debt.amountPaid)}</Text></Text>
-          </View>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <View style={{ backgroundColor: statusColor + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
-            <Text style={{ color: statusColor, fontWeight: '700', fontSize: 11, textTransform: 'capitalize' }}>{debt.status}</Text>
-          </View>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: balance > 0 ? '#EF4444' : '#10B981' }}>{formatCurrency(balance)}</Text>
-        </View>
-      </View>
-      {debt.status !== 'paid' && (
-        <TouchableOpacity
-          style={{ marginTop: 10, backgroundColor: '#10B981', borderRadius: 8, paddingVertical: 9, alignItems: 'center' }}
-          onPress={() => onRecordPayment(debt)}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Record Payment</Text>
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  )
-}
+type Tab = 'purchases' | 'debts' | 'notes'
 
 export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const { bg, card, text, muted, border, brand, success, danger } = useTheme()
   const router = useRouter()
-  const { bg, card, text, textSecondary: textMuted, border, brand: orange, success } = useTheme()
+  const { data, isLoading } = useCustomerDetail(id ?? '')
+  const [tab, setTab] = useState<Tab>('purchases')
+  const [noteText, setNoteText] = useState('')
 
-  const [customer, setCustomer] = useState<Customer | null>(null)
-  const [debts, setDebts] = useState<Debt[]>([])
-  const [loading, setLoading] = useState(true)
-  const [detailDebt, setDetailDebt] = useState<Debt | null>(null)
-  const [paymentTarget, setPaymentTarget] = useState<Debt | null>(null)
-
-  const load = useCallback(async () => {
-    if (!id) return
-    setLoading(true)
-    try {
-      const [c, ds] = await Promise.all([
-        getCustomerById(id),
-        getDebtsByCustomer(id),
-      ])
-      setCustomer(c)
-      setDebts(ds)
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
-
-  useEffect(() => { load() }, [load])
-
-  async function handleDebtDetail(debt: Debt) {
-    const full = await getDebtById(debt.id)
-    if (full) setDetailDebt(full)
+  if (isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
+        <CustomerHeader router={router} text={text} card={card} border={border} title="Customer" />
+        <View style={styles.loading}><ActivityIndicator color={brand} /></View>
+      </SafeAreaView>
+    )
   }
 
-  const totalDebt = debts.reduce((s: number, d: Debt) => s + (d.amount - d.amountPaid), 0)
-  const activeDebts = debts.filter((d: Debt) => d.status !== 'paid')
+  if (!data?.customer) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
+        <CustomerHeader router={router} text={text} card={card} border={border} title="Customer" />
+        <View style={styles.empty}><Text style={{ color: muted }}>Customer not found</Text></View>
+      </SafeAreaView>
+    )
+  }
+
+  const { customer, sales, debts, payments } = data
+  const totalDebt = debts
+    .filter(d => d.status === 'pending' || d.status === 'partial')
+    .reduce((sum, d) => sum + d.amount, 0)
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: card, borderBottomColor: border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginRight: 4 }}>
-          <ArrowLeft size={20} color={text} />
-        </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: text }]} numberOfLines={1}>
-          {customer?.name ?? 'Customer'}
-        </Text>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
+      <CustomerHeader router={router} text={text} card={card} border={border} title={customer.name} />
 
-      <FlatList
-        data={debts}
-        keyExtractor={(item: Debt) => item.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-        refreshing={loading}
-        onRefresh={load}
-        ListHeaderComponent={
-          <View style={{ gap: 12 }}>
-            {/* Contact info */}
-            {customer && (
-              <View style={[s.infoCard, { backgroundColor: card, borderColor: border }]}>
-                {customer.phone && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Phone size={15} color={textMuted} />
-                    <Text style={{ color: text, fontSize: 14 }}>{customer.phone}</Text>
-                  </View>
-                )}
-                {customer.email && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Mail size={15} color={textMuted} />
-                    <Text style={{ color: text, fontSize: 14 }}>{customer.email}</Text>
-                  </View>
-                )}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <AlertCircle size={15} color={textMuted} />
-                  <Text style={{ color: textMuted, fontSize: 13 }}>Added {formatDate(customer.createdAt)}</Text>
-                </View>
+      {/* Customer info card */}
+      <View style={[styles.infoCard, { backgroundColor: card, borderColor: border }]}>
+        <View style={styles.avatarRow}>
+          <View style={[styles.avatar, { backgroundColor: brand + '20' }]}>
+            <User size={28} color={brand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.customerName, { color: text }]}>{customer.name}</Text>
+            {customer.phone && (
+              <View style={styles.infoRow}>
+                <Phone size={13} color={muted} />
+                <Text style={[styles.infoText, { color: muted }]}>{customer.phone}</Text>
               </View>
             )}
-
-            {/* Debt summary */}
-            <View style={[s.summaryCard, { backgroundColor: orange + '15', borderColor: orange + '30' }]}>
-              <View style={{ flexDirection: 'row', gap: 16 }}>
-                <View style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>TOTAL OWING</Text>
-                  <Text style={{ color: totalDebt > 0 ? '#EF4444' : '#10B981', fontSize: 22, fontWeight: '800', marginTop: 2 }}>
-                    {formatCurrency(totalDebt)}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ color: textMuted, fontSize: 11, fontWeight: '600' }}>ACTIVE DEBTS</Text>
-                  <Text style={{ color: orange, fontSize: 22, fontWeight: '800', marginTop: 2 }}>
-                    {activeDebts.length}
-                  </Text>
-                </View>
+            {customer.email && (
+              <View style={styles.infoRow}>
+                <Mail size={13} color={muted} />
+                <Text style={[styles.infoText, { color: muted }]}>{customer.email}</Text>
               </View>
+            )}
+            <View style={styles.infoRow}>
+              <Calendar size={13} color={muted} />
+              <Text style={[styles.infoText, { color: muted }]}>
+                Member since {formatDate(customer.createdAt)}
+              </Text>
             </View>
-
-            <Text style={{ fontWeight: '800', fontSize: 15, color: text, marginTop: 4 }}>Debt History</Text>
           </View>
-        }
-        renderItem={({ item }: ListRenderItemInfo<Debt>) => (
-          <DebtRow debt={item} onPress={handleDebtDetail} onRecordPayment={setPaymentTarget} />
+        </View>
+      </View>
+
+      {/* Tab bar */}
+      <View style={[styles.tabBar, { backgroundColor: card, borderBottomColor: border }]}>
+        {(['purchases', 'debts', 'notes'] as Tab[]).map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.tab, tab === t && { borderBottomColor: brand, borderBottomWidth: 2 }]}
+            onPress={() => setTab(t)}
+          >
+            <Text style={[styles.tabText, { color: tab === t ? brand : muted }]}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Tab content */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {tab === 'purchases' && <PurchaseHistory sales={sales} />}
+        {tab === 'debts' && (
+          <DebtHistory debts={debts} payments={payments} totalDebt={totalDebt} />
         )}
-        ListEmptyComponent={
-          <View style={{ padding: 40, alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: textMuted, fontSize: 14 }}>No debts recorded</Text>
-          </View>
-        }
-      />
-
-      {/* Modals */}
-      <DebtDetailModal debt={detailDebt} onClose={() => setDetailDebt(null)} onRecordPayment={setPaymentTarget} />
-      <DebtPartialPaymentModal debt={paymentTarget} onClose={() => setPaymentTarget(null)} onPaid={load} />
+        {tab === 'notes' && (
+          <NotesTab notes={noteText} onSave={setNoteText} />
+        )}
+      </ScrollView>
     </SafeAreaView>
   )
 }
 
-const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1 },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
-  infoCard: { borderRadius: 12, padding: 14, borderWidth: 1, gap: 8 },
-  summaryCard: { borderRadius: 12, padding: 16, borderWidth: 1 },
+function CustomerHeader({
+  router, text, card, border, title,
+}: {
+  router: ReturnType<typeof useRouter>
+  text: string; card: string; border: string; title: string
+}) {
+  return (
+    <View style={[styles.header, { backgroundColor: card, borderBottomColor: border }]}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <ArrowLeft size={20} color={text} />
+      </TouchableOpacity>
+      <Text style={[styles.headerTitle, { color: text }]} numberOfLines={1}>{title}</Text>
+      <View style={{ width: 36 }} />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 14, borderBottomWidth: 1 },
+  backBtn: { padding: 8 },
+  headerTitle: { fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },
+  infoCard: { margin: 16, marginBottom: 0, borderRadius: 12, padding: 16, borderWidth: 1 },
+  avatarRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  avatar: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  customerName: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  infoText: { fontSize: 13 },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1 },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  tabText: { fontSize: 14, fontWeight: '700' },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 })

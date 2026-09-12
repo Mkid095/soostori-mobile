@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 19 — Reports SDK Wiring, Subscription Enforcement, Offline Policy, Customer & Sales Detail
+
+**What changed:** Wired Reports SDK, subscription enforcement in sync timer, offline policy hardening, customer detail page, sales detail page, M-Pesa receipt → audit log.
+
+**Phase 19.1 — Reports SDK Wiring:**
+- `src/services/customers-service.ts` — NEW: `getCustomerDetail(customerId)` aggregates customer + sales + debts + debt payments.
+- `src/hooks/useCustomerDetail.ts` — NEW: React Query hook for customer detail.
+- `src/hooks/useSaleDetail.ts` — NEW: React Query hook wrapping existing `getSaleById`.
+- `app/customers/[id].tsx` — NEW: customer detail screen with tabs (Purchase History | Debt History | Notes); reuses existing `customers.tsx` navigation.
+  - `app/customers/_components/purchase-history.tsx` — Purchase history rows.
+  - `app/customers/_components/debt-history.tsx` — Debt history rows + outstanding balance card.
+  - `app/customers/_components/notes-tab.tsx` — Notes editor.
+- `app/sales/[id].tsx` — NEW: sale detail screen (ID, status, line items, customer, payment, receipt); reuses existing sales list navigation.
+  - `app/sales/_components/sale-summary-card.tsx` — Sale header card with status badge and total.
+  - `app/sales/_components/sale-line-items.tsx` — Line items table + subtotal.
+  - `app/sales/_components/sale-payment-section.tsx` — Payment info + print receipt button.
+- `app/reports/index.tsx` — Rewritten: tab bar (Sales | Inventory | Debt | Expense) as the reports hub; redirects to tab screen on selection.
+
+**Phase 19.2 — Subscription Enforcement in Sync Timer:**
+- `src/services/subscription-enforcer.ts` — NEW: `checkSubscriptionForSync()` (cached entitlement → revalidation), `enforceSubscriptionForSync()` (throws `SubscriptionBlockedError` on blocked/cancelled; warns on grace period), `SubscriptionBlockedError`.
+- `src/services/mobile-sync-service.ts` — `pullAndApply()` now calls `enforceSubscriptionForSync()` first before pulling; added `pauseSync()` / `resumeSync()` / `isSyncPaused()` / `syncPaused` flag; `triggerSync()` skips if paused.
+
+**Phase 19.3 — Offline Policy Hardening:**
+- `src/services/offline-policy-service.ts` — NEW: `OfflinePolicyService` wiring `@soostori/offline` `computeOfflineState()`; `checkPolicy()` evaluates 3-day state machine; `recordOnline()` updates `lastOnlineAt`; `checkAndRecordOnline()` exported for use after sync.
+- `src/services/mobile-sync-service.ts` — `pullAndApply()` calls `offlinePolicyService.checkPolicy()` at start of each sync cycle; calls `checkAndRecordOnline()` after success.
+- `src/components/app/root-layout-content.tsx` — Added `OfflineWarningBanner` (amber banner "Day N offline — connect soon") when phase is `OFFLINE_WARNING`; added `OfflineBlockedFallback` full-screen gate when phase is `OFFLINE_LIMIT_EXCEEDED`; added `'offline-blocked'` to `AuthState`; Phase 19 DB init effect calls `offlinePolicyService.checkPolicy()`.
+
+**Phase 19.4 — M-Pesa Receipt → Audit Log:**
+- `src/services/mpesa-service.ts` — `handleStkCallback()` now records successful M-Pesa receipt to `audit_logs` via `logAudit('mpesa_receipt_issued', ...)` including receipt number, amount, customer phone, and timestamp.
+
 ### Phase 18 — M-Pesa STK Push, Audit Trail, Subscription Blocked, SDK Auth Edge Cases (Mobile)
 
 **What changed:** Real PayHero M-Pesa STK Push, audit trail wiring verified, subscription-blocked UX screen, SDK auth enrollment explicit error states.
