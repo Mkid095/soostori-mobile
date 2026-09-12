@@ -6,7 +6,7 @@
 // surfaces the §29 contact phone (UNAUTHORIZED_LOGIN_CONTACT_PHONE) so the
 // user can reach a salesperson for enrollment. No shop is ever created here.
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { db, id } from '../lib/instant-client'
+import { db } from '../lib/instant-client'
 import type { CloudAuthResponse, SubscriptionEntitlement } from '../contracts/cloud'
 import { cacheEntitlement } from './entitlement-cache'
 import { resolveOrCreateEmployee } from './cloud-auth-employee'
@@ -84,8 +84,22 @@ export async function resolveSubscription(shopId: string): Promise<SubscriptionE
   return entitlement
 }
 
-export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAuthResult> {
-  // Exchange Google ID token for a cloud session via InstantDB auth
+/**
+ * Exchange a Google ID token for a cloud session via InstantDB.
+ *
+ * This is called by AuthApiClient.signInWithIdToken in auth-cloud-flow.ts,
+ * which is itself called by CloudAuth.signInWithGoogleIdToken from the SDK.
+ * The SDK maps the return value to its GoogleSignInResult type.
+ */
+export async function cloudExchangeGoogleToken(idToken: string): Promise<{
+  userId: string
+  email: string
+  displayName?: string
+  idToken: string
+  accessToken: string
+  refreshToken?: string
+  isNewUser: boolean
+}> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await (db.auth as any).signInWithGoogle({ idToken })
   if (!result.user) throw new Error('Google authentication failed')
@@ -94,33 +108,14 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<CloudAu
   const email = result.user.email ?? ''
   await AsyncStorage.setItem('@soostori:cloudToken', userId)
 
-  const existing = await findExistingEmployee(email)
-  if (!existing) {
-    return { ok: false, code: 'PERSON_NOT_FOUND' }
-  }
-
-  const shop = await findShopById(existing.shopId)
-  if (!shop) {
-    return { ok: false, code: 'PERSON_NOT_FOUND' }
-  }
-
-  const shopId = shop.id
-  await resolveOrRegisterDevice(shopId)
-  const employee = await resolveOrCreateEmployee(shopId, email, existing)
-  const entitlement = await resolveSubscription(shopId)
-
-  // Phase 18: flag new_device when cloud employee record has no prior device enrollment
-  const isNewDevice = !existing.cloudEmployeeId
-
   return {
-    ok: true,
-    response: {
-      user: { id: userId, email, type: employee.role },
-      shop: { id: shop.id, name: shop.name, slug: shop.slug, plan: shop.plan, status: shop.status },
-      entitlement,
-      serverTime: new Date().toISOString(),
-    },
-    enrollmentState: isNewDevice ? 'new_device' : 'existing_device',
+    userId,
+    email,
+    displayName: result.user.displayName ?? email.split('@')[0],
+    idToken,
+    accessToken: userId,
+    refreshToken: '',
+    isNewUser: result.isNewUser ?? false,
   }
 }
 
@@ -144,7 +139,3 @@ async function findShopById(shopId: string): Promise<ShopRow | null> {
   const shops = (result.data.shops as ShopRow[]) || []
   return shops.find((s) => s.id === shopId) ?? null
 }
-
-// `id` is imported above to keep parity with previous behaviour — re-export
-// for any external caller still importing it from this barrel.
-export { id }

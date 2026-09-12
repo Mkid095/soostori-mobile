@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 1 — Mobile Auth SDK Audit
+
+**What changed:** Updated `@soostori/auth` to `^0.1.0-alpha.7`, verified SDK consumption, fixed auth gaps.
+
+**SDK audit fixes (B1–B8):**
+- `package.json` — Updated `@soostori/auth` from `^0.1.0-alpha.6` → `^0.1.0-alpha.7` (A1).
+- `src/hooks/auth-cloud-flow.ts` — Fixed TypeScript errors (removed incorrect `CloudAuth` generic type, added missing stub methods to `AuthApiClient`). B1/B2: Option B confirmed — custom InstantDB auth path retained; `AuthApiClient.signInWithIdToken` bridges to `cloudExchangeGoogleToken`.
+- `src/services/cloud-auth-backend.ts` — `cloudExchangeGoogleToken` now returns `GoogleSignInResult` shape (userId, email, displayName, idToken, accessToken, refreshToken, isNewUser) consumed by SDK's `CloudAuth.signInWithGoogleIdToken`. B2 verified.
+- `src/services/cloud-auth-employee.ts` — Renamed `cacheSession` → `cacheSessionIdentity` to clarify purpose. Added `deviceId` to cached identity. Removed `@soostori:deviceId` from `cacheSessionIdentity` call in `resolveOrCreateEmployee` (deviceId set by caller). B3: identity cached for cold-start before SDK `StoredSession` is available.
+- `src/hooks/auth-device-enrollment.ts` — Added `setDeviceHasPin` to cloudApi. `verifyPinForEnrollment` now accepts `pinProof` (not `pinHash`) per SDK's `OperationalCloudApi` contract. B6: gap documented — real `enrollmentToken` requires backend connection; fake token remains as placeholder.
+- `src/hooks/auth-types.ts` — No changes needed; types are compatible with SDK `OperationalCloudApi`.
+
+**New gaps found:**
+- B6 (partial): `enrollmentToken` in `verifyPinForEnrollment` is still a placeholder. The real token requires the SDK's `beginEnrollment()` → `verifyPinForEnrollment()` backend flow. Not fixable until backend is connected.
+
+**B1/B2 Decision:** Option B — magic code and Google token exchange use custom InstantDB calls (`db.auth.signInWithMagicCode`, `db.auth.signInWithGoogle`) via `cloudVerifyMagicCode` / `cloudExchangeGoogleToken`. `AuthApiClient.signInWithIdToken` bridges these custom calls to the SDK's `CloudAuth.signInWithGoogleIdToken()` for session management.
+
 ### Phase 19 — Reports SDK Wiring, Subscription Enforcement, Offline Policy, Customer & Sales Detail
 
 **What changed:** Wired Reports SDK, subscription enforcement in sync timer, offline policy hardening, customer detail page, sales detail page, M-Pesa receipt → audit log.

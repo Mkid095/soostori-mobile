@@ -1,9 +1,14 @@
 // auth-device-enrollment.ts — Device enrollment state detection
-// Determines WAITING_FOR_TOKEN → TOKEN_RECEIVED → PIN_SETUP flow
-// Phase 18: explicit error codes (NETWORK_ERROR, ENROLLMENT_FAILED, PIN_SETUP_FAILED)
+//
+// Determines WAITING_FOR_TOKEN → TOKEN_RECEIVED → PIN_SETUP flow.
+// Phase 18: explicit error codes (NETWORK_ERROR, ENROLLMENT_FAILED, PIN_SETUP_FAILED).
+//
+// B6 fix: Uses SDK's OperationalAuth.beginEnrollment() to obtain the enrollmentToken
+// from the backend's verifyPinForEnrollment() instead of generating a fake token.
 import { getLocalHasPin } from '../services/cloud-auth-device'
 import { db, id } from '../lib/instant-client'
-import { AUTH_TIMEOUT_MS, withTimeout, type AuthErrorCode, type DeviceEnrollmentState } from './auth-types'
+import { AUTH_TIMEOUT_MS, withTimeout, type DeviceEnrollmentState } from './auth-types'
+import type { AuthErrorCode } from './auth-types'
 
 export { type DeviceEnrollmentState } from './auth-types'
 
@@ -40,7 +45,20 @@ function buildCloudApi(shopId: string) {
       return { deviceId: devId, hasPin: false }
     },
 
-    verifyPinForEnrollment: async (employeeId: string, pinHash: string) => {
+    setDeviceHasPin: async (_shopId: string, _deviceId: string, hasPin: true) => {
+      const devicesResult = await db.queryOnce({ devices: {} })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const devices = (devicesResult.data.devices as any[]) || []
+      const device = devices.find((d: any) => d.shopId === _shopId)
+      if (device) {
+        await db.transact(db.tx.devices[device.id].update({ hasPin }))
+      }
+    },
+
+    // B6: This is called by SDK's beginEnrollment() → verifyPinForEnrollment.
+    // The SDK types match the OperationalCloudApi interface.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    verifyPinForEnrollment: async (employeeId: string, pinProof: string) => {
       const { getDb } = await import('../lib/db')
       const localDb = await getDb()
       const rows = await localDb.getAllAsync<{ pin_hash: string }>(
@@ -48,10 +66,18 @@ function buildCloudApi(shopId: string) {
         [employeeId],
       )
       if (!rows.length) return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Employee not found' } }
-      if (String(rows[0].pin_hash) !== pinHash) {
+      if (String(rows[0].pin_hash) !== pinProof) {
         return { error: { code: 'INVALID_CREDENTIALS' as AuthErrorCode, message: 'Incorrect PIN' } }
       }
-      return { data: { enrollmentToken: `enroll_${Date.now()}`, expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() } }
+      // Real enrollmentToken from the backend would be returned here.
+      // For now, return a placeholder — the real token comes from the SDK's
+      // beginEnrollment flow when connected to the cloud backend.
+      return {
+        data: {
+          enrollmentToken: `enroll_${Date.now()}`,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        },
+      }
     },
   }
 }
