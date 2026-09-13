@@ -54,6 +54,9 @@ function buildAuthApiClient() {
             accessToken: result.accessToken,
             refreshToken: result.refreshToken ?? '',
             isNewUser: result.isNewUser,
+            employeeId: result.employeeId,
+            shopId: result.shopId,
+            deviceId: result.deviceId,
           },
         }
       } catch (e: unknown) {
@@ -171,47 +174,33 @@ export async function signInWithGoogle(
   const employeeId = session?.employeeId ?? ''
 
   if (!shopId || !employeeId) {
-    // Fallback: query InstantDB directly if StoredSession not yet available.
-    const employeesResult = await db.queryOnce({ employees: {} })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cloudEmployees = (employeesResult.data.employees as any[]) || []
-    const existing = cloudEmployees.find((e: { email?: string }) => e.email === email)
-    if (!existing) {
-      return {
-        ok: false,
-        result: {
-          ok: false,
-          error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'No Soostori membership for this account' },
-        },
-      }
+    // GAP FIX: use employeeId from StoredSession if available,
+    // then look up the shop directly rather than by email.
+    if (employeeId) {
+      // Still need shopId — look up by employee record.
+      try {
+        const employeesResult = await db.queryOnce({ employees: {} })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const employees = (employeesResult.data.employees as any[]) || []
+        const emp = employees.find((e: { id?: string }) => e.id === employeeId)
+        if (emp) {
+          const resolvedShopId = emp.shopId ?? ''
+          await cacheSessionIdentity(employeeId, resolvedShopId, deviceId, emp.role ?? 'attendant')
+          return {
+            ok: true,
+            result: {
+              ok: true,
+              data: { userId, email, enrollmentState: 'existing_device', shopId: resolvedShopId, cloudDeviceId: '', deviceId },
+            },
+          }
+        }
+      } catch { /* fall through to error */ }
     }
-    const shopsResult = await db.queryOnce({ shops: {} })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cloudShops = (shopsResult.data.shops as any[]) || []
-    const shop = cloudShops.find((s: { id?: string }) => s.id === (existing as { shopId?: string }).shopId)
-    if (!shop) {
-      return {
-        ok: false,
-        result: {
-          ok: false,
-          error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'Business record missing' },
-        },
-      }
-    }
-    // Cache for cold-start before SDK restoreSession runs.
-    await cacheSessionIdentity(existing.id, shop.id, deviceId, (existing.role as string) ?? 'attendant')
     return {
-      ok: true,
+      ok: false,
       result: {
-        ok: true,
-        data: {
-          userId,
-          email,
-          enrollmentState: 'existing_device',
-          shopId: shop.id,
-          cloudDeviceId: '',
-          deviceId,
-        },
+        ok: false,
+        error: { code: 'PERSON_NOT_FOUND' as AuthErrorCode, message: 'No Soostori membership for this account' },
       },
     }
   }

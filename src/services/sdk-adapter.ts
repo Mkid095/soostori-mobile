@@ -29,6 +29,7 @@ interface PlatformAuthAdapter {
   getSecureStorage(): SecureStorage
   getNetworkStatus(): NetworkStatus
   randomString(byteLength: number): string
+  setCookie(name: string, value: string, options?: { httpOnly?: boolean; secure?: boolean; sameSite?: 'Lax' | 'Strict' | 'None'; maxAge?: number; path?: string }): void | Promise<void>
 }
 
 function getNetworkStatus(): NetworkStatus {
@@ -79,6 +80,8 @@ export const rnPlatformAdapter: PlatformAuthAdapter = {
   getSecureStorage: getSecureStorage,
   getNetworkStatus: getNetworkStatus,
   randomString,
+  // PKCE cookies are irrelevant on mobile — Google Sign-In uses native libraries
+  setCookie: () => {},
 }
 
 // Platform adapter subset needed by OperationalAuth

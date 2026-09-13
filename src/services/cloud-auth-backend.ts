@@ -99,6 +99,9 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<{
   accessToken: string
   refreshToken?: string
   isNewUser: boolean
+  employeeId: string
+  shopId: string
+  deviceId: string
 }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await (db.auth as any).signInWithGoogle({ idToken })
@@ -106,7 +109,37 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<{
 
   const userId = result.user.id
   const email = result.user.email ?? ''
+  // Use the InstantDB user.id as the access token — this is the canonical
+  // session identifier for this user in the InstantDB system.
   await AsyncStorage.setItem('@soostori:cloudToken', userId)
+
+  // Resolve employee record from InstantDB using the authenticated userId as the
+  // personId key (not email — email can change and is not unique across businesses).
+  let employeeId = ''
+  let shopId = ''
+  let deviceId = ''
+  try {
+    const employeesResult = await db.queryOnce({ employees: {} })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const employees = (employeesResult.data.employees as any[]) || []
+    const employee = employees.find((e) => e.personId === userId)
+    if (employee) {
+      employeeId = employee.id ?? ''
+      shopId = employee.shopId ?? ''
+    }
+  } catch { /* employee lookup optional */ }
+
+  // Resolve deviceId from the enrolled devices list using the stored device token.
+  const deviceToken = await AsyncStorage.getItem('@soostori:deviceToken')
+  if (deviceToken) {
+    try {
+      const devicesResult = await db.queryOnce({ devices: {} })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const devices = (devicesResult.data.devices as any[]) || []
+      const device = devices.find((d) => d.connectionToken === deviceToken)
+      if (device) deviceId = device.id ?? ''
+    } catch { /* device lookup optional */ }
+  }
 
   return {
     userId,
@@ -114,8 +147,11 @@ export async function cloudExchangeGoogleToken(idToken: string): Promise<{
     displayName: result.user.displayName ?? email.split('@')[0],
     idToken,
     accessToken: userId,
-    refreshToken: '',
+    refreshToken: undefined,
     isNewUser: result.isNewUser ?? false,
+    employeeId,
+    shopId,
+    deviceId,
   }
 }
 

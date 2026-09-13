@@ -57,6 +57,7 @@ declare module '@soostori/auth' {
     getSecureStorage(): SecureStorage
     getNetworkStatus(): NetworkStatus
     randomString(byteLength: number): string
+    setCookie(name: string, value: string, options?: { httpOnly?: boolean; secure?: boolean; sameSite?: 'Lax' | 'Strict' | 'None'; maxAge?: number; path?: string }): void | Promise<void>
   }
 
   export interface GoogleOAuthConfig {
