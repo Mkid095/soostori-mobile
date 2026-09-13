@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Phase 2 — Mobile Business SDK Audit
+
+**What changed:** Updated `@soostori/*` SDK packages to Phase 2 accepted versions per `PHASE-02-BUSINESS-ACCEPTANCE.md`.
+
+**SDK package version updates:**
+
+| Package | Old | New |
+|---------|-----|-----|
+| `@soostori/business` | `^0.1.0-alpha.1` | `^0.1.0-alpha.2` |
+| `@soostori/team` | _(missing)_ | `^0.1.0-alpha.3` |
+| `@soostori/subscription` | `^0.1.0-alpha.1` | `^0.1.0-alpha.2` |
+| `@soostori/devices` | `^0.1.0-alpha.1` | `^0.1.0-alpha.2` |
+| `@soostori/cloud` | `^0.1.0-alpha.1` | `^0.1.0-alpha.5` |
+| `@soostori/events` | _(missing)_ | `^0.1.0-alpha.2` |
+
+**Gap analysis:**
+
+| Area | Status | Evidence |
+|------|--------|---------|
+| Business context | ✅ Verified | `BusinessContext.tsx` + AsyncStorage `@soostori:shopId` |
+| Business switching | ✅ Verified | `useBusinessSwitcher.ts` → `setActiveBusiness()` |
+| Membership isolation | ✅ Verified | `db-team.ts` scopes queries to `businessId` param; `session-helper.ts` provides `getCurrentMember()` |
+| Device registration | ✅ Verified | `auth-device-enrollment.ts` → `createDeviceEnrollment()` → InstantDB |
+| `@soostori/devices` usage | ✅ Verified | `PrimaryDeviceCoordinator` from `@soostori/devices` wired in `mobile-primary-coordinator.ts` and `primary-device-coordinator.ts` |
+| `@soostori/subscription` usage | ✅ Verified | `enforceSubscription()` + `computeState()` wired in `subscription-gate.ts` |
+| `@soostori/events` usage | ✅ Verified | `createEvent()` + event constants used in `mobile-sync-integration.ts`, `sdk-event-bus.ts`, `sdk-bridge-types.ts` |
+| `@soostori/business` | ⚠️ Not directly imported | Mobile uses InstantDB directly for business setup; `@soostori/business` types/services not yet consumed — future phase |
+| `@soostori/team` | ⚠️ Not directly imported | Team operations use local DB + InstantDB; `@soostori/team` service not yet consumed — future phase |
+
+**Files changed:** `package.json`
+
 ### Phase 1 — Mobile Auth SDK Audit
 
 **What changed:** Updated `@soostori/auth` to `^0.1.0-alpha.9`, adopted CloudAuth as single auth source, wired SDK session management.
