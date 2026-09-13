@@ -11,7 +11,7 @@
     "@react-navigation/bottom-tabs": "^7.18.14",
     "@react-navigation/native": "^7.3.14",
     "@soostori/audit": "^0.1.0-alpha.1",
-    "@soostori/auth": "^0.1.0-alpha.7",
+    "@soostori/auth": "^0.1.0-alpha.9",
     "@soostori/business": "^0.1.0-alpha.1",
     "@soostori/cloud": "^0.1.0-alpha.1",
     "@soostori/contracts": "workspace:*",

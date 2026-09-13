@@ -1,6 +1,7 @@
 // useAuthSdk.ts — CloudAuth + OperationalAuth wrapper for React Native
 // Full auth flow: cloud auth (Google) → operational enrollment → local PIN verification
 // Phase 18: refactored into auth-cloud-flow, auth-pin-flow, auth-device-enrollment
+// Phase 1 audit fix: wired restoreSession(), signOut(), AuthEvent listeners, refreshSession()
 import { useState, useEffect, useCallback, useRef } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
@@ -10,6 +11,7 @@ import { type AuthSdkState, type AuthResult, type AuthErrorCode, type DeviceEnro
 import { createCloudAuth, signInWithGoogle as cloudSignIn } from './auth-cloud-flow'
 import { setupPin, verifyPin, getLocalHasPin } from './auth-pin-flow'
 import { determineEnrollmentState } from './auth-device-enrollment'
+import type { AuthEvent } from '@soostori/auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const OperationalAuthClass = (require('@soostori/auth') as any).OperationalAuth
@@ -38,6 +40,7 @@ export function useAuthSdk() {
   const cloudAuthRef = useRef<ReturnType<typeof createCloudAuth> | null>(null)
   const opAuthRef = useRef<InstanceType<typeof OperationalAuth> | null>(null)
   const deviceIdRef = useRef<string | null>(null)
+  const unsubscribeRef = useRef<(() => void) | null>(null)
 
   const [state, setState] = useState<AuthSdkState>({
     isCloudAuthenticated: false, cloudUser: null, shopId: null,
@@ -51,13 +54,48 @@ export function useAuthSdk() {
       deviceIdRef.current = devId
       cloudAuthRef.current = createCloudAuth(rnPlatformAdapter)
       opAuthRef.current = new OperationalAuth(rnOperationalPlatformAdapter)
-      const storedSession = await SecureStore.getItemAsync('@soostori:opSession')
-      if (storedSession && opAuthRef.current) {
-        const session = opAuthRef.current.deserializeSession(storedSession)
+
+      // Phase 1 audit fix: restore session from secure storage via SDK
+      const storedSession = await cloudAuthRef.current.restoreSession()
+      if (storedSession) {
+        // Session restored — user is already cloud-authenticated
+        // Register AuthEvent listener for session expiry / revocation
+        const listener = (event: AuthEvent) => {
+          if (event.type === 'SESSION_EXPIRED' || event.type === 'SIGNED_OUT') {
+            // Wipe local state and redirect to auth screen
+            SecureStore.deleteItemAsync('@soostori:opSession').catch(() => {})
+            setState({ isCloudAuthenticated: false, cloudUser: null, shopId: null, enrollmentState: null, isOperational: false, operationalSession: null, isLoading: false, error: null })
+          }
+        }
+        unsubscribeRef.current = cloudAuthRef.current.on(listener)
+
+        // Check for existing operational session (local PIN)
+        const opSession = await SecureStore.getItemAsync('@soostori:opSession')
+        if (opSession && opAuthRef.current) {
+          const session = opAuthRef.current.deserializeSession(opSession)
+          if (session) {
+            setState({ isOperational: true, operationalSession: session, isLoading: false, isCloudAuthenticated: true, cloudUser: { id: storedSession.employeeId || storedSession.userId, email: storedSession.email }, shopId: storedSession.shopId, enrollmentState: 'OPERATIONAL', error: null })
+            return
+          }
+        }
+
+        // Cloud authenticated but no operational session yet
+        setState({ isCloudAuthenticated: true, cloudUser: { id: storedSession.employeeId || storedSession.userId, email: storedSession.email }, shopId: storedSession.shopId, enrollmentState: null, isOperational: false, operationalSession: null, isLoading: false, error: null })
+        return
+      }
+
+      // No stored session — check for operational session
+      const opSession = await SecureStore.getItemAsync('@soostori:opSession')
+      if (opSession && opAuthRef.current) {
+        const session = opAuthRef.current.deserializeSession(opSession)
         if (session) { setState({ isOperational: true, operationalSession: session, isLoading: false, isCloudAuthenticated: false, cloudUser: null, shopId: null, enrollmentState: null, error: null }); return }
       }
       setState((s) => ({ ...s, isLoading: false }))
     })()
+
+    return () => {
+      unsubscribeRef.current?.()
+    }
   }, [])
 
   const signInWithGoogle = useCallback(async (idToken: string) => {
@@ -92,15 +130,34 @@ export function useAuthSdk() {
 
   const hasPinEnrolled = useCallback(async (): Promise<boolean> => getLocalHasPin(), [])
 
+  // Phase 1 audit fix: use cloudAuth.signOut() from SDK instead of custom cloudLogout()
   const signOut = useCallback(async () => {
     await SecureStore.deleteItemAsync('@soostori:opSession')
     await SecureStore.deleteItemAsync('@soostori:hasPin')
     await SecureStore.deleteItemAsync('@soostori:pinSalt')
     await SecureStore.deleteItemAsync('@soostori:pinVerifier')
-    await AsyncStorage.multiRemove(['@soostori:cloudToken', '@soostori:shopId', '@soostori:employeeId', '@soostori:employeeRole'])
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = null
+    if (cloudAuthRef.current) {
+      await cloudAuthRef.current.signOut()
+    }
     await cacheEntitlement({ shopId: 'default', status: 'expired', plan: 'free', expiresAt: new Date(0).toISOString(), verifiedAt: new Date(0).toISOString(), serverTime: new Date(0).toISOString(), nextVerificationDeadline: new Date(0).toISOString() }, new Date(0).toISOString())
     setState({ isCloudAuthenticated: false, cloudUser: null, shopId: null, enrollmentState: null, isOperational: false, operationalSession: null, isLoading: false, error: null })
   }, [])
 
-  return { ...state, signInWithGoogle, setupPin: setupPinFn, verifyPin: verifyPinFn, hasPinEnrolled, signOut }
+  // Phase 1 audit fix: expose refreshSession for keeping cloud sessions alive
+  const refreshSession = useCallback(async () => {
+    if (!cloudAuthRef.current) return
+    try {
+      const result = await cloudAuthRef.current.refreshSession()
+      if (!result.ok) {
+        // Session refresh failed — clear and force re-auth
+        await signOut()
+      }
+    } catch {
+      // Network error — ignore, keep existing session
+    }
+  }, [signOut])
+
+  return { ...state, signInWithGoogle, setupPin: setupPinFn, verifyPin: verifyPinFn, hasPinEnrolled, signOut, refreshSession }
 }

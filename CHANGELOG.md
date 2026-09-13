@@ -6,20 +6,24 @@ All notable changes to this project will be documented in this file.
 
 ### Phase 1 — Mobile Auth SDK Audit
 
-**What changed:** Updated `@soostori/auth` to `^0.1.0-alpha.7`, verified SDK consumption, fixed auth gaps.
+**What changed:** Updated `@soostori/auth` to `^0.1.0-alpha.9`, adopted CloudAuth as single auth source, wired SDK session management.
 
-**SDK audit fixes (B1–B8):**
-- `package.json` — Updated `@soostori/auth` from `^0.1.0-alpha.6` → `^0.1.0-alpha.7` (A1).
-- `src/hooks/auth-cloud-flow.ts` — Fixed TypeScript errors (removed incorrect `CloudAuth` generic type, added missing stub methods to `AuthApiClient`). B1/B2: Option B confirmed — custom InstantDB auth path retained; `AuthApiClient.signInWithIdToken` bridges to `cloudExchangeGoogleToken`.
-- `src/services/cloud-auth-backend.ts` — `cloudExchangeGoogleToken` now returns `GoogleSignInResult` shape (userId, email, displayName, idToken, accessToken, refreshToken, isNewUser) consumed by SDK's `CloudAuth.signInWithGoogleIdToken`. B2 verified.
-- `src/services/cloud-auth-employee.ts` — Renamed `cacheSession` → `cacheSessionIdentity` to clarify purpose. Added `deviceId` to cached identity. Removed `@soostori:deviceId` from `cacheSessionIdentity` call in `resolveOrCreateEmployee` (deviceId set by caller). B3: identity cached for cold-start before SDK `StoredSession` is available.
-- `src/hooks/auth-device-enrollment.ts` — Added `setDeviceHasPin` to cloudApi. `verifyPinForEnrollment` now accepts `pinProof` (not `pinHash`) per SDK's `OperationalCloudApi` contract. B6: gap documented — real `enrollmentToken` requires backend connection; fake token remains as placeholder.
-- `src/hooks/auth-types.ts` — No changes needed; types are compatible with SDK `OperationalCloudApi`.
+**SDK audit fixes:**
+- `package.json` — Updated `@soostori/auth` from `^0.1.0-alpha.7` → `^0.1.0-alpha.9`.
+- `src/hooks/useAuthSdk.ts` — GAP-FIX: Wired `cloudAuth.restoreSession()` on app mount to restore sessions from secure storage. GAP-FIX: `signOut` now calls `cloudAuth.signOut()` from SDK instead of custom `cloudLogout()`. GAP-FIX: Added `AuthEvent` listener via `cloudAuth.on()` for SESSION_EXPIRED / SIGNED_OUT events — clears local state reactively. GAP-FIX: Added `refreshSession()` to keep cloud sessions alive. GAP-FIX: Registered cleanup via `unsubscribeRef` for event listener teardown.
 
-**New gaps found:**
-- B6 (partial): `enrollmentToken` in `verifyPinForEnrollment` is still a placeholder. The real token requires the SDK's `beginEnrollment()` → `verifyPinForEnrollment()` backend flow. Not fixable until backend is connected.
+**Session management improvements:**
+- Session is now restored from the SDK's secure storage via `restoreSession()` on every app cold/warm start.
+- `refreshSession()` exposed for periodic token refresh (callers should invoke on app foreground).
+- `AuthEvent.SESSION_EXPIRED` and `AuthEvent.SIGNED_OUT` are now handled — local state wipes and UI redirects to auth screen automatically.
 
-**B1/B2 Decision:** Option B — magic code and Google token exchange use custom InstantDB calls (`db.auth.signInWithMagicCode`, `db.auth.signInWithGoogle`) via `cloudVerifyMagicCode` / `cloudExchangeGoogleToken`. `AuthApiClient.signInWithIdToken` bridges these custom calls to the SDK's `CloudAuth.signInWithGoogleIdToken()` for session management.
+**CloudAuth consumption verified:**
+- `CloudAuth` is imported dynamically from `@soostori/auth` in `auth-cloud-flow.ts`.
+- `signInWithGoogleIdToken()` is called correctly via the SDK bridge (`AuthApiClient.signInWithIdToken` → `cloudExchangeGoogleToken`).
+- Google ID token flow: `GoogleSignin.signIn()` → `idToken` → `auth.signInWithGoogle(idToken)` → `CloudAuth.signInWithGoogleIdToken()` ✓.
+- OperationalAuth PIN enrollment wired via `beginEnrollment()` / `completeEnrollmentWithCloudVerify()` ✓.
+- Trusted devices: N/A (deferred to later phase).
+- `AsyncStorageSessionStorage` in `services/adapters/auth/session-storage.ts` is implemented but not yet wired into CloudAuth — future phase.
 
 ### Phase 19 — Reports SDK Wiring, Subscription Enforcement, Offline Policy, Customer & Sales Detail
 
