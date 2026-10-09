@@ -133,11 +133,11 @@ jobs:
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          # Use the discovered SDK path (from GITHUB_ENV) for local.properties
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          # Use the discovered SDK path for local.properties
+          echo "sdk.dir=/usr/local/lib/android/sdk" > android/local.properties
           cat android/local.properties
           chmod +x ./android/gradlew
           ./android/gradlew --project-dir android assembleDebug
