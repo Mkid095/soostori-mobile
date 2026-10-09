@@ -109,13 +109,20 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          # Use pre-installed Android SDK in /usr/lib/android-sdk
-          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
-          # Accept any pending SDK licenses
-          yes 2>/dev/null | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          # Find SDK location
+          SDK_PATH=$(find / -maxdepth 4 -name "build-tools" -type d 2>/dev/null | head -1 | xargs dirname 2>/dev/null)
+          if [ -z "$SDK_PATH" ]; then
+            SDK_PATH="/usr/lib/android-sdk"
+          fi
+          echo "ANDROID_HOME=$SDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
+          # Find sdkmanager
+          SDKMANAGER=$(find $SDK_PATH -name sdkmanager 2>/dev/null | head -1)
+          echo "SDKMANAGER=$SDKMANAGER"
+          # Accept licenses
+          yes 2>/dev/null | $SDKMANAGER --licenses || true
           # Install required packages
-          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
+          $SDKMANAGER "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
           # Verify SDK
           ls -la $ANDROID_HOME/
 
