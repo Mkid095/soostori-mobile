@@ -112,6 +112,7 @@ jobs:
           ANDROID_HOME: /usr/lib/android-sdk
           ANDROID_SDK_ROOT: /usr/lib/android-sdk
         run: |
+          chmod +x ./android/gradlew
           ./android/gradlew --project-dir android assembleDebug
           ls -la android/app/build/outputs/apk/debug/
 
