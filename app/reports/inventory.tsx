@@ -1,6 +1,7 @@
 // app/reports/inventory.tsx — Phase 13: Inventory Report screen
 /** @jsxImportSource react */
-import React, { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { type ReactNode } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Package, AlertTriangle, Clock } from 'lucide-react-native'
 import { useRouter } from 'expo-router'
@@ -132,7 +133,7 @@ export default function InventoryReportScreen() {
   )
 }
 
-function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: React.ReactNode; color?: string }) {
+function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: ReactNode; color?: string }) {
   const { card, text, muted, border } = useTheme()
   return (
     <View style={[s.kpiCard, { backgroundColor: card, borderColor: border }]}>

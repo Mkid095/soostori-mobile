@@ -78,6 +78,9 @@ function createMockPlatformAdapter(secureStorage: ReturnType<typeof createMockSe
       for (let i = 0; i < byteLength; i++) arr[i] = Math.floor(Math.random() * 256)
       return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')
     },
+    setCookie(_name: string, _value: string, _options?: { httpOnly?: boolean; secure?: boolean; sameSite?: 'Lax' | 'Strict' | 'None'; maxAge?: number; path?: string }): void | Promise<void> {
+      /* no-op for tests */
+    },
   }
 }
 
@@ -146,7 +149,7 @@ async function run(): Promise<void> {
     const net = createMockNetworkStatus()
     const platform = createMockPlatformAdapter(secure, net)
     const api = createMockApiClient()
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     assert('[3] CloudAuth instance created', typeof auth === 'object')
     assert('[3] hasValidSession = false (no session)', auth.hasValidSession === false)
     assert('[3] isSessionStale = true (no session)', auth.isSessionStale === true)
@@ -172,7 +175,7 @@ async function run(): Promise<void> {
     // Override signInEmail for this test
     ;(api as any).signInEmail = async () => ({ data: mockResult, error: undefined })
 
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     let eventFired: AuthEvent | null = null
     auth.on((e) => { eventFired = e })
 
@@ -209,7 +212,7 @@ async function run(): Promise<void> {
     const api = createMockApiClient()
 
     // Override restoreSession to return the pre-stored session
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
 
     // Manually set session (simulate restoreSession)
     ;(auth as any)._session = storedSession
@@ -241,7 +244,7 @@ async function run(): Promise<void> {
 
     const platform = createMockPlatformAdapter(secure, net)
     const api = createMockApiClient()
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     ;(auth as any)._session = staleSession
     ;(auth as any)._networkStatus = { isOnline: false }
 
@@ -255,7 +258,7 @@ async function run(): Promise<void> {
     const net = createMockNetworkStatus({ isOnline: true })
     const platform = createMockPlatformAdapter(secure, net)
     const api = createMockApiClient()
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
 
     let signedOut: boolean = false
     auth.on((e) => { if (e.type === 'SIGNED_OUT') signedOut = true })
@@ -275,7 +278,7 @@ async function run(): Promise<void> {
     const net = createMockNetworkStatus({ isOnline: true })
     const platform = createMockPlatformAdapter(secure, net)
     const api = createMockApiClient()
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
 
     let callCount = 0
     const unsub = auth.on(() => { callCount++ })
@@ -322,7 +325,7 @@ async function run(): Promise<void> {
     const net = createMockNetworkStatus({ isOnline: false })
     const platform = createMockPlatformAdapter(secure, net)
     const api = createMockApiClient()
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
 
     const result = await auth.signInWithEmail('test@example.com', 'pw')
     assert('[11] Offline: signInWithEmail returns ok:false', result.ok === false)
@@ -350,7 +353,7 @@ async function run(): Promise<void> {
     ;(api as any).registerTrustedDevice = async () => ({ data: deviceResult, error: undefined })
 
     // Set up a session first
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     ;(auth as any)._session = { userId: 'u-trust', employeeId: '', shopId: '', deviceId: '', email: 'trust@example.com', accessToken: 'x', refreshToken: 'y', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(), lastValidatedAt: new Date().toISOString() }
 
     let deviceEvent: AuthEvent | null = null
@@ -377,7 +380,7 @@ async function run(): Promise<void> {
       error: { code: 'INVALID_CREDENTIALS', message: 'Bad email or password' },
     })
 
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     const result = await auth.signInWithEmail('bad@example.com', 'wrong')
     assert('[13] Invalid credentials returns ok:false', result.ok === false)
     assert('[13] Error code = INVALID_CREDENTIALS',
@@ -400,7 +403,7 @@ async function run(): Promise<void> {
     }
     ;(api as any).refreshSession = async () => ({ data: refreshResult, error: undefined })
 
-    const auth = new TestDoubleCloudAuth(platform, api)
+    const auth = new TestDoubleCloudAuth(platform, api as any)
     ;(auth as any)._session = { userId: 'u-refresh', employeeId: '', shopId: '', deviceId: '', email: 'refresh@example.com', accessToken: 'old-access', refreshToken: 'refresh-token', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(), lastValidatedAt: new Date().toISOString() }
 
     let refreshedEvent: AuthEvent | null = null

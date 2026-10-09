@@ -103,7 +103,7 @@ export async function refundSale(
         [generateId(), refundId ?? '', saleId ?? '', item.productId ?? '', item.productName ?? '', refundQty, item.unitPrice ?? 0, refundLineAmount ?? 0, itemKey ?? ''],
       )
       // Restore stock via refunded ledger movement (idempotent)
-      await refundSaleStock(saleId, item.productId, refundQty, String(itemKey))
+      await refundSaleStock(saleId, item.productId ?? '', refundQty, String(itemKey))
     }
 
     // Update sale status

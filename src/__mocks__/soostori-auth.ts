@@ -2,7 +2,13 @@
 // Provides the minimal surface that mobile SDK code needs in tests.
 // Default implementations: no-op permission checks that always succeed.
 
-import type { Member } from '../types/permissions'
+// Member type stub — matches the shape used by mobile SDK code
+export interface Member {
+  id?: string
+  role: string
+  permissions?: string[]
+  memberCapabilityOverrides?: Record<string, boolean>
+}
 
 export function hasPermission(_member: Member | null, _capability: string): boolean {
   return true

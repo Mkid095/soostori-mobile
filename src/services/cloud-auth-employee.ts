@@ -68,7 +68,7 @@ export async function resolveOrCreateEmployee(
   // We write the identity keys here as a fallback for cold-start scenarios
   // (before the SDK has restored a session). The SDK's StoredSession is
   // authoritative once available.
-  await cacheSessionIdentity(existing.id, shopId, '', role)
+  await cacheSessionIdentity(existing.id as EmployeeId, shopId as ShopId, '', role)
 
   return { id: existing.id, email: existing.email ?? email, role }
 }

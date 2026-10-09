@@ -55,7 +55,7 @@ export async function listMovements(
 ): Promise<StockMovement[]> {
   const db = await getDb()
   const conditions: string[] = []
-  const args: unknown[] = []
+  const args: (string | number)[] = []
 
   if (filter?.productId) {
     conditions.push('product_id = ?'); args.push(filter.productId)

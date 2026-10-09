@@ -5,6 +5,7 @@ import { computeOfflineState, type OfflineState, type PolicyInputs } from '@soos
 import { getCurrentShopId } from './session-helper'
 import { getCachedEntitlement } from './entitlement-cache'
 import { getSyncStatus } from './mobile-sync-service'
+import type { ShopId, BusinessId } from '@soostori/core'
 
 const log = {
   warn: (msg: string, ...args: unknown[]) => console.warn(`[OfflinePolicy] ${msg}`, ...args),
@@ -51,10 +52,10 @@ export class OfflinePolicyService {
     const syncStatus = await getSyncStatus()
 
     const inputs: PolicyInputs = {
-      shopId: shopId ?? 'shop-default',
+      shopId: (shopId ?? 'shop-default') as ShopId,
       isOnline: syncStatus.isOnline,
       lastVerifiedAt,
-      entitlement: entitlement ?? null,
+      entitlement: (entitlement ?? null) as PolicyInputs['entitlement'],
       offlineSince: lastOnline ? lastVerifiedAt : null,
       subscriptionExpired: false,
       primaryLost: false,

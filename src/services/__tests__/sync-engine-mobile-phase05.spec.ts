@@ -57,14 +57,14 @@ describe('Phase 05 — Mobile Real Sync Engine', () => {
     ;(db.transact as jest.Mock).mockClear()
 
     await enqueue({
-      id: 'evt-p2',
-      idempotencyKey: 'ik-p2',
-      businessId: 'shop-test',
+      id: 'evt-p2' as any,
+      idempotencyKey: 'ik-p2' as any,
+      businessId: 'shop-test' as any,
       entityKind: 'product',
       entityId: 'prod-p2',
       operation: 'create',
-      originatingDeviceId: 'mobile',
-      originatingEmployeeId: 'system',
+      originatingDeviceId: 'mobile' as any,
+      originatingEmployeeId: 'system' as any,
       clientSequence: 1,
       clientCreatedAt: new Date().toISOString(),
       entityVersion: 1,

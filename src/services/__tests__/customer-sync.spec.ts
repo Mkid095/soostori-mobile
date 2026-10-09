@@ -90,7 +90,7 @@ test('[customer-4] same idempotencyKey replay is also no_op (stub)', () => {
 })
 
 test('[customer-5] entityKind customer is routed by apply()', () => {
-  const event = makeCustomerEvent({ entityKind: 'customer' })
+  const event = makeCustomerEvent({ } as any)
   expect(engine.apply(null, event).state).toBe('no_op')
 })
 

@@ -1,7 +1,6 @@
 // src/services/__tests__/products-mobile.spec.ts
 // Phase 08 — Products Mobile tests
 // Pattern: top-level let + jest.SpyInstance + mockResolvedValueOnce (matches business-setup-mobile.spec.ts)
-import { describe, it, expect, beforeEach, beforeAll, jest } from '@jest/globals'
 
 // ── Seed shared AsyncStorage shopId for all tests ────────────────────────────
 beforeAll(() => {

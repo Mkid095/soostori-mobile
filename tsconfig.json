@@ -5,7 +5,9 @@
     "skipLibCheck": true,
     "types": ["jest", "node"],
     "paths": {
-      "@soostori/auth/permissions": ["./src/types/permissions.ts"]
+      "@soostori/auth/permissions": ["./src/types/permissions.ts"],
+      "@soostori/customers": ["./src/types/@soostori/CustomersRepository.d.ts"],
+      "@soostori/sales": ["./src/types/@soostori/SalesRepository.d.ts"]
     }
   },
   "include": [

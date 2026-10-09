@@ -26,7 +26,7 @@ export async function applyProductEvent(
         'STALE_VERSION',
         JSON.stringify({ eventVersion: event.entityVersion, localVersion: p._localVersion, event }),
       )
-      return { state: 'no_op', entityVersion: event.entityVersion }
+      return { state: 'no_op' }
     }
 
     database.runAsync(

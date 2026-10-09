@@ -8,8 +8,9 @@
  */
 
 import { newId } from '@soostori/core'
-import { SalesService } from '@soostori/sales'
 import type { UUID } from '@soostori/core'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { SalesService } = require('@soostori/sales') as { SalesService: unknown }
 
 import {
   MobileSalesRepository,
@@ -107,7 +108,7 @@ async function run(): Promise<void> {
     incrementStock: async () => undefined,
     setStock: async () => undefined,
   }
-  const svc = new SalesService(
+  const svc = new (SalesService as any)(
     repo as never,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     productStub as any,

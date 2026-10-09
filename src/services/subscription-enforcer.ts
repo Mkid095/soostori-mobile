@@ -48,7 +48,7 @@ export async function checkSubscriptionForSync(): Promise<SubscriptionSyncState>
       }
       return { status: 'expired_grace', expiresAt: cached.expiresAt }
     }
-    if (cached.status === 'cancelled' || cached.status === 'blocked') {
+    if (cached.status === 'cancelled' || cached.status === ('blocked' as typeof cached.status)) {
       return { status: cached.status as SubscriptionSyncStatus, expiresAt: cached.expiresAt }
     }
     if (cached.status === 'active' || cached.status === 'past_due') {

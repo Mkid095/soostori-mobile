@@ -10,7 +10,7 @@ import { MAX_RETRIES, getNextRetryDelay } from './sync-retry-backoff'
  * Otherwise schedules the next retry.
  */
 export async function handlePushFailure(
-  row: Record<string, unknown>,
+  row: { id: unknown; business_id: unknown; entity_kind: unknown; entity_id: unknown; operation: unknown; idempotency_key: unknown; payload: unknown; created_at: unknown; retry_count?: number },
   err: unknown,
 ): Promise<void> {
   const database = await getDb()
@@ -18,14 +18,14 @@ export async function handlePushFailure(
   const reason = err instanceof Error ? err.message : String(err)
 
   if (retryCount > MAX_RETRIES) {
-    await database.runAsync(`DELETE FROM sync_outbox WHERE id = ?`, [row.id])
+    await database.runAsync(`DELETE FROM sync_outbox WHERE id = ?`, [String(row.id)])
     await database.runAsync(
       `INSERT INTO sync_dead_letter
          (id, business_id, entity_kind, entity_id, operation, idempotency_key, payload, created_at, failed_at, reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        row.id, row.business_id, row.entity_kind, row.entity_id, row.operation,
-        row.idempotency_key, row.payload, row.created_at,
+        String(row.id), String(row.business_id), String(row.entity_kind), String(row.entity_id),
+        String(row.operation), String(row.idempotency_key), String(row.payload), String(row.created_at),
         new Date().toISOString(), reason,
       ],
     )
@@ -36,7 +36,7 @@ export async function handlePushFailure(
   const nextRetryAt = Date.now() + delayMs
   await database.runAsync(
     `UPDATE sync_outbox SET state = 'pending', retry_count = ?, next_retry_at = ? WHERE id = ?`,
-    [retryCount, nextRetryAt, row.id],
+    [retryCount, nextRetryAt, String(row.id)],
   )
 }
 
@@ -60,8 +60,8 @@ export async function retryDeadLetter(id: string): Promise<void> {
     `INSERT OR REPLACE INTO sync_outbox
        (id, business_id, entity_kind, entity_id, operation, idempotency_key, payload, created_at, state, retry_count, next_retry_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL)`,
-    [row.id, row.business_id, row.entity_kind, row.entity_id, row.operation,
-     row.idempotency_key, row.payload, row.created_at],
+    [String(row.id), String(row.business_id), String(row.entity_kind), String(row.entity_id),
+     String(row.operation), String(row.idempotency_key), String(row.payload), String(row.created_at)],
   )
   await database.runAsync(`DELETE FROM sync_dead_letter WHERE id = ?`, [id])
 }

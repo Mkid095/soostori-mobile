@@ -22,6 +22,7 @@ const OperationalAuth = OperationalAuthClass as {
   new(platform: unknown): {
     deserializeSession(raw: string): OperationalSession | null
     serializeSession(s: OperationalSession): string
+    setupPin(opts: { pin: string; hashPin: (p: string, s?: string) => Promise<{ hash: string; salt: string }>; employeeId: string; shopId: string; deviceId: string }): Promise<AuthResult<{ salt: string; verifierHash: string }>>
     verifyPin(opts: unknown): Promise<AuthResult<OperationalSession>>
     hasPinEnrolled(): Promise<boolean>
     clearPin(): Promise<void>

@@ -8,11 +8,14 @@
  */
 
 // ── Mock state ────────────────────────────────────────────────────────────────
+// Mocking strategy: ts-jest transpiles to CommonJS, so `jest.unstable_mockModule`
+// (ESM-only) does NOT apply. We use `jest.doMock` + `require` so the CJS
+// `require()` calls inside the service pick up the mock factories.
 
 const mockRefundSale = jest.fn()
 const mockGetRefundItems = jest.fn()
 
-jest.unstable_mockModule('../../../services/db-sale-refund', () => ({
+jest.doMock('../../../services/db-sale-refund', () => ({
   refundSale: mockRefundSale,
   getRefundItems: mockGetRefundItems,
 }))

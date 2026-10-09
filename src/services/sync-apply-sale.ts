@@ -13,7 +13,7 @@ export async function applySaleEvent(
   const p = event.payload as Record<string, unknown>
 
   // SALE_RECONCILIATION_REQUIRED events are conflicts — write to sync_conflicts, not sales table
-  if (event.operation === 'reconciliation_required') {
+  if ((event.operation as string) === 'reconciliation_required') {
     const reconciliationPayload = p as unknown as SaleReconciliationRequiredPayload
     await createConflict(
       event.businessId,

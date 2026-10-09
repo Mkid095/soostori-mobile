@@ -57,7 +57,7 @@ export class MobileSalesRepository implements SalesRepository {
 
   async totals(filter?: SaleFilter): Promise<SalesTotals> {
     void filter
-    return { count: 0, total: 0 as never, byPaymentMethod: {} }
+    return { count: 0, totalAmount: 0, byPaymentMethod: {} }
   }
 
   async findHeldSales(_shopId: UUID): Promise<HeldSale[]> {

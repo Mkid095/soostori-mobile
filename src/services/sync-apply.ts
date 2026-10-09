@@ -5,6 +5,7 @@
 // sync-apply-customer.ts has applyCustomerEvent
 
 import type { SyncEvent } from '@soostori/contracts'
+import type { SyncEventId, IdempotencyKey, BusinessId, DeviceId, EmployeeId } from '@soostori/core'
 
 export { applySaleEvent } from './sync-apply-sale'
 export { applyProductEvent } from './sync-apply-product'
@@ -16,14 +17,14 @@ export function cloudEventToSyncEvent(
 ): SyncEvent {
   const payload = cev.payload as Record<string, unknown> | undefined
   return {
-    id: String(cev.id ?? ''),
-    idempotencyKey: String(cev.idempotencyKey ?? cev.id ?? ''),
-    businessId: String(cev.shopId ?? shopId),
+    id: String(cev.id ?? '') as SyncEventId,
+    idempotencyKey: String(cev.idempotencyKey ?? cev.id ?? '') as IdempotencyKey,
+    businessId: String(cev.shopId ?? shopId) as BusinessId,
     entityKind: String(cev.entity ?? '') as SyncEvent['entityKind'],
     entityId: String(cev.entityId ?? ''),
     operation: String(cev.operation ?? '') as SyncEvent['operation'],
-    originatingDeviceId: String(cev.deviceId ?? 'cloud'),
-    originatingEmployeeId: 'cloud',
+    originatingDeviceId: String(cev.deviceId ?? 'cloud') as DeviceId,
+    originatingEmployeeId: 'cloud' as EmployeeId,
     clientSequence: Number(cev.sequenceNumber ?? 0),
     clientCreatedAt: String(cev.timestamp ?? cev.syncedAt ?? new Date().toISOString()),
     entityVersion: Number(cev.version ?? 1),

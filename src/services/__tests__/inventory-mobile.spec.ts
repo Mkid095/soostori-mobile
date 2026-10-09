@@ -1,6 +1,5 @@
 // src/services/__tests__/inventory-mobile.spec.ts
 // Phase 09 — Inventory Mobile tests
-import { describe, it, expect, beforeAll, jest } from '@jest/globals'
 
 // ── Shared mock store (populated per test via setMockData) ───────────────────
 const mockData = {
