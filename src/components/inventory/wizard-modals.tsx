@@ -5,8 +5,17 @@ import { UnitPickerModal } from './unit-picker-modal'
 import { AddCategoryDialog } from './add-category-dialog'
 import type { Category } from '../../lib/types'
 
+interface ThemeColors {
+  card: string
+  text: string
+  bg: string
+  textSecondary: string
+  border: string
+  brand: string
+}
+
 interface WizardModalsProps {
-  c: Record<string, string>
+  c: ThemeColors
   showScanner: boolean
   showCatPicker: boolean
   showUnitPicker: boolean

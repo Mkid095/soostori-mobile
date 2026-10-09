@@ -70,6 +70,15 @@ export interface SyncEvent {
   operation: string
   payload?: string
   syncedAt: string
+  /** Cloud-assigned version number — maps to entityVersion in SDK SyncEvent. */
+  version?: number
+  /** Idempotency key — maps to idempotencyKey in SDK SyncEvent. */
+  idempotencyKey?: string
+  /** Sequence number for ordering — maps to clientSequence in SDK SyncEvent. */
+  sequenceNumber?: number
+  /** Timestamp of event creation — maps to clientCreatedAt in SDK SyncEvent. */
+  timestamp?: string
+  deviceId?: string
 }
 
 export interface BackupSnapshot {

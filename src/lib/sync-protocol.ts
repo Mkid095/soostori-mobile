@@ -16,7 +16,7 @@ export type SyncEventType =
   | 'HOST_TRANSFER'
   | 'HOST_HEARTBEAT'
 
-export type SaleStatus = 'pending' | 'pending_offline' | 'confirmed' | 'rejected' | 'cancelled'
+export type SaleStatus = 'pending' | 'pending_offline' | 'confirmed' | 'rejected' | 'completed' | 'cancelled' | 'refunded'
 export type PairingStatus = 'pending' | 'approved' | 'rejected'
 export type EmployeeRole = 'owner' | 'manager' | 'attendant'
 export type DeviceType = 'desktop' | 'mobile' | 'tablet'
@@ -72,7 +72,7 @@ export interface Sale {
   id: string; shopId: string; employeeId: string; deviceId: string
   status: SaleStatus; paymentMethod?: string
   subtotal: number; discountAmount: number; totalAmount: number
-  customerIdNumber?: string; note?: string
+  customerIdNumber?: string; note?: string; customerId?: string
   createdAt: string; updatedAt: string
 }
 

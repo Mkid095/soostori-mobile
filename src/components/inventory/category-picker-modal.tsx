@@ -8,13 +8,22 @@ import { X, Search, Check } from 'lucide-react-native'
 import type { Category } from '../../lib/types'
 import { categoryPickerStyles as s } from './category-picker-styles'
 
+interface ThemeColors {
+  card: string
+  text: string
+  bg: string
+  textSecondary: string
+  border: string
+  brand: string
+}
+
 interface Props {
   visible: boolean
   onClose: () => void
   categories: Category[]
   selectedId?: string
   onSelect: (cat: Category) => void
-  c: Record<string, string>
+  c: ThemeColors
 }
 
 export function CategoryPickerModal({

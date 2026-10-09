@@ -24,6 +24,7 @@ export interface DebtEntry {
   amount: number
   status: string
   dueDate: string | null
+  createdAt: string
 }
 
 export interface DebtPaymentEntry {
@@ -71,6 +72,7 @@ export async function getCustomerDetail(customerId: string): Promise<CustomerDet
     amount: Number(row.amount) || 0,
     status: String(row.status),
     dueDate: row.due_date ? String(row.due_date) : null,
+    createdAt: String(row.created_at),
   }))
 
   // Gather all debt IDs and fetch payments

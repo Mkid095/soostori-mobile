@@ -132,7 +132,7 @@ export default function InventoryReportScreen() {
   )
 }
 
-function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: React.ReactElement; color?: string }) {
+function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: React.ReactNode; color?: string }) {
   const { card, text, muted, border } = useTheme()
   return (
     <View style={[s.kpiCard, { backgroundColor: card, borderColor: border }]}>

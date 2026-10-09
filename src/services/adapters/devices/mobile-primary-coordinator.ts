@@ -39,11 +39,11 @@ export function initMobilePrimaryCoordinator(opts: { shopId: string; deviceId: s
 
 export function ingestPrimaryHeartbeat(fromDeviceId: string, timestampMs: number): void {
   if (!_coord || !_shopId || !_localDeviceId) return
-  const hb: Heartbeat = {
+  const hb = {
     deviceId: fromDeviceId as UUID,
     shopId: _shopId,
     timestamp: new Date(timestampMs).toISOString(),
-    isPrimary: true,
+    isLanHost: true,
     reachable: true,
     stockSequence: 0,
   }

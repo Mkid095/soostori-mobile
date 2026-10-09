@@ -1,7 +1,7 @@
 // root-layout-content.tsx — Auth gate + device recovery for RootLayout
 import { useEffect, useState } from 'react'
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native'
-import { Stack } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '../../hooks/useTheme'

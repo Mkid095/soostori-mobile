@@ -72,6 +72,8 @@ export async function initTeamSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       sequence_number INTEGER NOT NULL,
       event_type TEXT NOT NULL,
       payload TEXT NOT NULL,
+      idempotency_key TEXT,
+      server_received_at TEXT,
       timestamp TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (shop_id) REFERENCES shops(id)
     );
@@ -117,14 +119,15 @@ export async function initTeamSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE TABLE IF NOT EXISTS sync_conflicts (
       id TEXT PRIMARY KEY,
       shop_id TEXT NOT NULL,
-      sale_id TEXT NOT NULL,
+      sale_id TEXT,
       device_id TEXT NOT NULL,
-      conflict_type TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      original_payload TEXT NOT NULL,
-      resolution TEXT,
+      employee_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
       resolved_by TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
+      resolved_at TEXT,
+      created_at TEXT NOT NULL,
       FOREIGN KEY (shop_id) REFERENCES shops(id)
     );
 

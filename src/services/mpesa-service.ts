@@ -2,6 +2,7 @@
 // Phase 18: refactored (PayHero client moved to mpesa-payhero-client.ts, types to mpesa-types.ts)
 // Phase 19: handleStkCallback records mpesa_receipt_number to audit_logs on completion
 import { getDb } from '../lib/db'
+import { generateId } from '../lib/formatters'
 import { payHeroRequestStkPush, payHeroQueryStkStatus } from './mpesa-payhero-client'
 import type { StkPushRequest, StkPushResponse, StkPaymentStatus } from './mpesa-types'
 import { logAudit } from './db-audit'
@@ -30,11 +31,10 @@ async function persistStkPush(
   checkoutRequestId: string,
 ): Promise<void> {
   const db = await getDb()
-  const { v4: uuid } = await import('uuid')
   await db.runAsync(
     `INSERT OR REPLACE INTO stk_push_state (id, checkout_request_id, phone, amount, status, created_at)
      VALUES (?, ?, ?, ?, 'pending', ?)`,
-    [uuid(), checkoutRequestId, req.phone, req.amount, new Date().toISOString()],
+    [generateId(), checkoutRequestId, req.phone, req.amount, new Date().toISOString()],
   )
 }
 
@@ -73,8 +73,7 @@ export async function requestStkPush(
     checkoutRequestId = result.checkoutRequestId
   } catch {
     // Offline fallback — persist locally so cashier can retry
-    const { v4: uuid } = await import('uuid')
-    checkoutRequestId = `offline_${uuid()}`
+    checkoutRequestId = `offline_${generateId()}`
     await persistStkPush(req, checkoutRequestId)
     throw new Error('PayHero unreachable — request queued for retry')
   }

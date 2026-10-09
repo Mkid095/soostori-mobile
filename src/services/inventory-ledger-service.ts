@@ -16,7 +16,7 @@
 import { newId } from '@soostori/core'
 import type { UUID } from '@soostori/core'
 import { StockMovementLedger } from '@soostori/inventory'
-import { MobileInventoryRepository } from '../adapters/inventory/mobile-inventory-repository'
+import { MobileInventoryRepository } from '../adapters/inventory/mobile-inventory-repository.js'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getCurrentShopId } from './session-helper'
 

@@ -98,7 +98,7 @@ export async function createSaleOffline(
 
   publishSdkEvent({
     name: 'sale.completed', entity: 'sale', entityId: saleId,
-    payload: { saleId, total: totalAmount, status: 'pending_offline' }, source: 'local',
+    payload: { saleId, total: totalAmount } as { saleId: string; total: number }, source: 'local',
   }).catch(() => {})
 
   return mapSaleRow(saleRow)

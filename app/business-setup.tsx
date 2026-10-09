@@ -268,7 +268,7 @@ export default function BusinessSetupScreen() {
           />
           <TextField
             label="Owner Email (optional)"
-            value={form.ownerEmail}
+            value={form.ownerEmail ?? ''}
             onChange={v => update('ownerEmail', v)}
             placeholder="jane@example.com"
             keyboardType="email-address"

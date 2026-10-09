@@ -1,7 +1,7 @@
 // app/(tabs)/customers.tsx — Search and add customers
 // Uses the canonical db-customers service.
 // Phase 11: tap customer → navigate to detail screen.
-import { useState, useEffect, useCallback, type ListRenderItemInfo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -70,7 +70,7 @@ export default function CustomersScreen() {
         data={customers}
         keyExtractor={(item: Customer) => item.id}
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
-        renderItem={({ item }: ListRenderItemInfo<Customer>) => (
+        renderItem={({ item }: { item: Customer }) => (
           <TouchableOpacity
             style={{ backgroundColor: card, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: border, flexDirection: 'row', alignItems: 'center' }}
             onPress={() => { router.push({ pathname: '/customers/[id]', params: { id: item.id } } as any) }}

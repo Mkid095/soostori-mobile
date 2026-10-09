@@ -6,6 +6,9 @@ const APP_ID = '487be5c5-7615-4bbd-b3b7-3aa97154ca99'
 
 const schema = i.schema({
   entities: {
+    // TODO (P1-12): add customers, products, debts to local InstantDB schema for direct queries.
+    // Currently these entities are managed via @soostori/sync offline queue only.
+    // Phase 3 should add them here so Mobile can run local queries without round-trip to server.
     $users: i.entity({
       email: i.string().unique().indexed(),
       imageURL: i.any(),

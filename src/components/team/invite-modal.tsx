@@ -19,6 +19,7 @@ const ROLE_LABELS: Record<EmployeeRole, string> = {
 }
 
 const ROLE_DESCRIPTIONS: Record<EmployeeRole, string> = {
+  owner: 'Full business control',
   manager: 'Full access except billing',
   cashier: 'Process sales & payments',
   attendant: 'View inventory & serve customers',

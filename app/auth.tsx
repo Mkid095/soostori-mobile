@@ -1,9 +1,10 @@
-// app/auth.tsx — Employee login: local PIN or Google Sign-In + OperationalAuth enrollment
+// app/auth.tsx — Employee login: magic code + PIN + OperationalAuth enrollment
 import React, { useState, useCallback } from 'react'
-import { View, Text, Animated, Platform, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native'
+import { View, Text, Animated, Platform, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, TextInput } from 'react-native'
 import { router } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Store, ChevronDown } from 'lucide-react-native'
+import * as SecureStore from 'expo-secure-store'
+import { Store, ChevronDown, Mail } from 'lucide-react-native'
 import { useTheme } from '../src/hooks/useTheme'
 import { PinKeypad } from '../src/components/auth/pin-keypad'
 import { PersonNotFoundScreen } from '../src/components/auth/person-not-found-screen'
@@ -11,13 +12,21 @@ import { JoinShopSheet } from '../src/components/shared/join-shop-sheet'
 import { EmployeePickerModal } from '../src/components/auth/employee-picker-modal'
 import { useAuthSdk } from '../src/hooks/useAuthSdk'
 import { useAuthEmployees } from '../src/hooks/useAuthEmployees'
-import { signInWithGoogle } from '../src/services/google-sign-in-service'
+import { cloudSendMagicCode, cloudVerifyMagicCode } from '../src/services/cloud-auth-backend'
 
 const PIN_LENGTH = 4
+const CODE_LENGTH = 6
 const EMPLOYEE_ID_KEY = '@soostori:employeeId'
 const EMPLOYEE_ROLE_KEY = '@soostori:employeeRole'
 
-type Step = 'select' | 'cloud_auth' | 'enrollment' | 'pin_verify' | 'pin_setup' | 'loading' | 'person_not_found'
+type Step =
+  | 'select'
+  | 'magic_send'
+  | 'magic_verify'
+  | 'pin_verify'
+  | 'pin_setup'
+  | 'loading'
+  | 'person_not_found'
 
 export default function AuthScreen() {
   const theme = useTheme()
@@ -27,14 +36,13 @@ export default function AuthScreen() {
   const [selectedEmployee, setSelectedEmployee] = useState<import('../src/lib/sync-protocol').Employee | null>(null)
   const [showEmployeePicker, setShowEmployeePicker] = useState(false)
   const [pin, setPin] = useState('')
+  const [code, setCode] = useState('')
+  const [magicEmail, setMagicEmail] = useState('')
   const [error, setError] = useState('')
   const [shakeAnim] = useState(() => new Animated.Value(0))
-  const [isValidating, setIsValidating] = useState(false)
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [showJoinSheet, setShowJoinSheet] = useState(false)
   const [step, setStep] = useState<Step>('select')
-  // For PIN setup during enrollment
-  const [enrollPin, setEnrollPin] = useState('')
 
   const shake = useCallback(() => {
     Animated.sequence([
@@ -46,24 +54,23 @@ export default function AuthScreen() {
     ]).start()
   }, [shakeAnim])
 
-  // Navigate once operational
   const navigateToPos = useCallback(async (employeeId: string, role: string) => {
     await AsyncStorage.setItem(EMPLOYEE_ID_KEY, employeeId)
     await AsyncStorage.setItem(EMPLOYEE_ROLE_KEY, role)
     router.replace('/(tabs)/pos')
   }, [])
 
-  // Handle PIN digit entry for local PIN login (returning employee)
+  // ── PIN digit entry ─────────────────────────────────────────────────────────
+
   const handleDigit = useCallback(async (digit: string) => {
     if (pin.length >= PIN_LENGTH) return
     const newPin = pin + digit
     setPin(newPin)
     setError('')
     if (newPin.length === PIN_LENGTH) {
-      setIsValidating(true)
+      setIsLoading(true)
       try {
         if (step === 'pin_setup') {
-          // Setting up a new PIN during enrollment
           const result = await auth.setupPin(newPin)
           if (result.ok) {
             await navigateToPos(auth.cloudUser?.id ?? selectedEmployee?.id ?? '', auth.cloudUser?.id ? 'owner' : (selectedEmployee?.role ?? 'attendant'))
@@ -71,7 +78,6 @@ export default function AuthScreen() {
             shake(); setError(result.error?.message ?? 'PIN setup failed'); setPin('')
           }
         } else if (step === 'pin_verify') {
-          // Verifying existing PIN to unlock operational session
           const result = await auth.verifyPin(newPin)
           if (result.ok) {
             await navigateToPos(auth.cloudUser?.id ?? selectedEmployee?.id ?? '', auth.cloudUser?.id ? 'owner' : (selectedEmployee?.role ?? 'attendant'))
@@ -80,90 +86,80 @@ export default function AuthScreen() {
           }
         }
       } catch {
-        shake(); setError('PIN validation failed'); setPin('')
+        shake(); setError('Validation failed'); setPin('')
       } finally {
-        setIsValidating(false)
+        setIsLoading(false)
       }
     }
   }, [pin, step, auth, selectedEmployee, shake, navigateToPos])
 
-  // Handle delete
   const handleDelete = useCallback(() => { setPin((p) => p.slice(0, -1)); setError('') }, [])
 
-  // Google Sign-In → cloud auth → enrollment flow
-  const handleGoogleSignIn = useCallback(async () => {
-    setIsGoogleLoading(true)
+  // ── Magic code: send ────────────────────────────────────────────────────────
+
+  const handleSendMagicCode = useCallback(async () => {
+    const email = magicEmail.trim()
+    if (!email || !email.includes('@')) {
+      setError('Enter a valid email address')
+      return
+    }
+    setIsLoading(true)
     setError('')
     try {
-      const googleUser = await signInWithGoogle()
-      const result = await auth.signInWithGoogle(googleUser.idToken)
-      if (!result.ok) {
-        // §17/§84: no membership for this authenticated person — show the
-        // §29 contact phone, do not attempt to create a shop.
-        if (result.error?.code === 'PERSON_NOT_FOUND') {
-          setStep('person_not_found')
-          return
+      await cloudSendMagicCode(email)
+      setStep('magic_verify')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send code')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [magicEmail])
+
+  // ── Magic code: verify ─────────────────────────────────────────────────────
+
+  const handleDigitCode = useCallback(async (digit: string) => {
+    if (code.length >= CODE_LENGTH) return
+    const newCode = code + digit
+    setCode(newCode)
+    setError('')
+    if (newCode.length === CODE_LENGTH) {
+      setIsLoading(true)
+      try {
+        const result = await cloudVerifyMagicCode(magicEmail.trim(), newCode)
+        if (!result.ok) {
+          if (result.code === 'PERSON_NOT_FOUND') {
+            setStep('person_not_found')
+            return
+          }
+          shake(); setError('Invalid or expired code'); setCode(''); return
         }
-        Alert.alert('Sign-In Error', result.error?.message ?? 'Authentication failed')
-        setStep('select')
-        return
-      }
 
-      // Enrollment state determines next step
-      switch (auth.enrollmentState) {
-        case 'DEVICE_NOT_ENROLLED':
-          setStep('enrollment')
-          break
-        case 'PIN_SETUP_REQUIRED':
+        const { response } = result
+        // Set cloud session state from magic code result
+        // auth.verifyMagicCode(...) would update auth state, but since we bypass
+        // the SDK's cloud auth, we replicate the essential state here.
+        // cloudToken MUST be in SecureStore (Keychain/Keystore) — never AsyncStorage.
+        await SecureStore.setItemAsync('@soostori:cloudToken', response.user.id)
+        await AsyncStorage.setItem('@soostori:shopId', response.shop.id)
+
+        // Determine next step based on enrollmentState
+        if (result.enrollmentState === 'new_device') {
           setStep('pin_setup')
-          break
-        case 'PIN_VERIFICATION_REQUIRED':
+        } else {
           setStep('pin_verify')
-          break
-        case 'OPERATIONAL':
-          await navigateToPos(auth.cloudUser?.id ?? '', 'owner')
-          break
-        default:
-          // Unknown state — prompt enrollment
-          setStep('enrollment')
+        }
+      } catch (err) {
+        shake(); setError(err instanceof Error ? err.message : 'Verification failed'); setCode('')
+      } finally {
+        setIsLoading(false)
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google sign-in failed'
-      Alert.alert('Sign-In Error', message)
-      setStep('select')
-    } finally {
-      setIsGoogleLoading(false)
     }
-  }, [auth, navigateToPos])
+  }, [code, magicEmail, shake])
 
-  // Begin enrollment (new device)
-  const handleBeginEnrollment = useCallback(async () => {
-    setIsValidating(true)
-    setError('')
-    try {
-      const result = await auth.beginEnrollment()
-      if (result.ok && 'nextState' in result.data) {
-        setStep(result.data.nextState === 'PIN_SETUP_REQUIRED' ? 'pin_setup' : 'select')
-      } else if (result.ok && 'needsCloudVerify' in result.data) {
-        // Need to verify existing PIN first
-        setStep('pin_verify')
-      } else if (!result.ok) {
-        setError(result.error?.message ?? 'Enrollment failed')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Enrollment failed')
-    } finally {
-      setIsValidating(false)
-    }
-  }, [auth])
+  const handleDeleteCode = useCallback(() => { setCode((c) => c.slice(0, -1)); setError('') }, [])
 
-  // Continue to PIN setup after cloud verify
-  const handleContinueToPinSetup = useCallback(async () => {
-    // PIN already entered in cloud_verify step → now set up local PIN
-    setStep('pin_setup')
-  }, [])
+  // ── Employee selected (existing local PIN login) ──────────────────────────────
 
-  // Employee selected for local PIN login (returning device)
   const handleEmployeeSelected = useCallback((emp: typeof selectedEmployee) => {
     setSelectedEmployee(emp)
     setShowEmployeePicker(false)
@@ -171,26 +167,34 @@ export default function AuthScreen() {
     setStep('pin_verify')
   }, [])
 
-  const dots = Array.from({ length: PIN_LENGTH }).map((_, i) => (
+  // ── Derived ──────────────────────────────────────────────────────────────────
+
+  const pinDots = Array.from({ length: PIN_LENGTH }).map((_, i) => (
     <View key={i} style={[styles.dot, { backgroundColor: i < pin.length ? theme.brand : 'transparent', borderColor: i < pin.length ? theme.brand : theme.muted }]} />
   ))
+  const codeDots = Array.from({ length: CODE_LENGTH }).map((_, i) => (
+    <View key={i} style={[styles.dot, { backgroundColor: i < code.length ? theme.brand : 'transparent', borderColor: i < code.length ? theme.brand : theme.muted }]} />
+  ))
 
-  // §17/§84: short-circuit the whole auth UI to the §29 contact screen
-  // when the authenticated person has no Soostori membership.
+  const showPinPad = step === 'pin_verify' || step === 'pin_setup'
+  const title =
+    step === 'pin_setup' ? 'Set Your PIN' :
+    step === 'pin_verify' ? 'Enter PIN' :
+    step === 'magic_send' ? 'Sign In' :
+    step === 'magic_verify' ? 'Enter Code' : 'Sign In'
+
+  // ── PERSON_NOT_FOUND screen ────────────────────────────────────────────────
+
   if (step === 'person_not_found') {
     return (
       <PersonNotFoundScreen
-        email={auth.cloudUser?.email ?? null}
+        email={magicEmail || null}
         onBack={() => { setStep('select'); setError('') }}
       />
     )
   }
 
-  // Determine what to show in the PIN pad area
-  const showPinPad = step === 'pin_verify' || step === 'pin_setup'
-  const showEnrollmentOptions = step === 'enrollment'
-  const showCloudLoading = step === 'cloud_auth' || isGoogleLoading || isValidating
-  const title = step === 'pin_setup' ? 'Set Your PIN' : step === 'pin_verify' ? 'Enter PIN' : step === 'enrollment' ? 'Device Setup' : 'Sign In'
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -200,7 +204,7 @@ export default function AuthScreen() {
         </View>
         <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
 
-        {/* Employee selector — shown when employee list is populated */}
+        {/* Employee selector — returning employees with stored PIN */}
         {(step === 'select' || step === 'pin_verify') && employees.length > 0 && (
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, minWidth: 220, justifyContent: 'space-between', marginBottom: 24 }}
@@ -213,36 +217,81 @@ export default function AuthScreen() {
           </TouchableOpacity>
         )}
 
-        {/* No employees — force cloud auth */}
-        {step === 'select' && employees.length === 0 && (
-          <Text style={{ color: theme.textSecondary, fontSize: 14, marginBottom: 24, textAlign: 'center' }}>
-            Sign in with Google to get started
-          </Text>
+        {/* Magic code: email entry */}
+        {step === 'magic_send' && (
+          <View style={{ width: '100%', marginBottom: 16 }}>
+            <View style={[styles.emailInput, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Mail size={18} color={theme.textSecondary} style={{ marginRight: 10 }} />
+              <TextInput
+                style={[styles.emailTextInput, { color: theme.text }]}
+                placeholder="your@email.com"
+                placeholderTextColor={theme.textSecondary}
+                value={magicEmail}
+                onChangeText={setMagicEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: theme.brand, opacity: isLoading ? 0.6 : 1 }]}
+              onPress={handleSendMagicCode}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Send Code</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Magic code: code entry dots */}
+        {step === 'magic_verify' && (
+          <>
+            <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+              Code sent to {magicEmail}
+            </Text>
+            <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>{codeDots}</Animated.View>
+            <PinKeypad
+              onDigit={handleDigitCode}
+              onDelete={handleDeleteCode}
+              onBiometric={undefined}
+              biometricEnabled={false}
+              cardBg={theme.card}
+              textColor={theme.text}
+              brandColor={theme.brand}
+              mutedColor={theme.muted}
+            />
+            <TouchableOpacity style={{ marginTop: 12 }} onPress={() => { setStep('magic_send'); setCode(''); setError('') }}>
+              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>← Use different email</Text>
+            </TouchableOpacity>
+          </>
         )}
 
         {/* PIN dots */}
         {showPinPad && (
-          <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>{dots}</Animated.View>
+          <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>{pinDots}</Animated.View>
         )}
+
         {error ? <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text> : <View style={styles.errorSpacer} />}
 
-        {/* Loading */}
-        {showCloudLoading ? (
+        {/* PIN keypad */}
+        {isLoading && (step === 'pin_verify' || step === 'pin_setup') ? (
           <ActivityIndicator size="large" color={theme.brand} style={{ marginTop: 20 }} />
         ) : showPinPad ? (
-          <PinKeypad onDigit={handleDigit} onDelete={handleDelete} onBiometric={undefined} biometricEnabled={false} cardBg={theme.card} textColor={theme.text} brandColor={theme.brand} mutedColor={theme.muted} />
-        ) : showEnrollmentOptions ? (
-          <View style={{ alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: theme.brand }]}
-              onPress={handleBeginEnrollment}
-            >
-              <Text style={styles.primaryButtonText}>Set Up Device</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setStep('select')}>
-              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          <PinKeypad
+            onDigit={handleDigit}
+            onDelete={handleDelete}
+            onBiometric={undefined}
+            biometricEnabled={false}
+            cardBg={theme.card}
+            textColor={theme.text}
+            brandColor={theme.brand}
+            mutedColor={theme.muted}
+          />
         ) : null}
 
         {/* Join Shop */}
@@ -253,7 +302,7 @@ export default function AuthScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Divider */}
+        {/* Magic code divider on select */}
         {step === 'select' && (
           <>
             <View style={styles.divider}>
@@ -262,16 +311,16 @@ export default function AuthScreen() {
               <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
             </View>
             <TouchableOpacity
-              style={[styles.googleButton, { backgroundColor: '#fff', borderColor: theme.border }]}
-              onPress={handleGoogleSignIn}
+              style={[styles.magicButton, { borderColor: theme.border }]}
+              onPress={() => { setStep('magic_send'); setError('') }}
               activeOpacity={0.7}
             >
-              <Text style={styles.googleButtonText}>Sign in with Google</Text>
+              <Text style={styles.magicButtonText}>Sign in with Email</Text>
             </TouchableOpacity>
           </>
         )}
 
-        {/* Back to select */}
+        {/* Back */}
         {(step === 'pin_verify' || step === 'pin_setup') && (
           <TouchableOpacity style={{ marginTop: 16 }} onPress={() => { setStep('select'); setPin(''); setError('') }}>
             <Text style={{ color: theme.textSecondary, fontSize: 13 }}>← Back</Text>
@@ -300,8 +349,10 @@ const styles = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 8, gap: 12 },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13 },
-  googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, gap: 10 },
-  googleButtonText: { fontSize: 16, fontWeight: '600', color: '#1F1F1F' },
-  primaryButton: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
+  magicButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, gap: 10, backgroundColor: '#fff' },
+  magicButtonText: { fontSize: 16, fontWeight: '600', color: '#1F1F1F' },
+  primaryButton: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 16, width: '100%', alignItems: 'center' },
   primaryButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  emailInput: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, width: '100%' },
+  emailTextInput: { flex: 1, fontSize: 16 },
 })

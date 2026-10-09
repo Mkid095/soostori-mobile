@@ -40,6 +40,12 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   await migrateAddColumn(db, 'debt_payments', 'business_id', 'TEXT')
   await migrateAddColumn(db, 'debt_payments', 'employee_id', 'TEXT')
   await migrateAddColumn(db, 'debt_payments', 'idempotency_key', 'TEXT')
+  // Phase 22 — sync_events: align with Desktop schema
+  await migrateAddColumn(db, 'sync_events', 'idempotency_key', 'TEXT')
+  await migrateAddColumn(db, 'sync_events', 'server_received_at', 'TEXT')
+  // Phase 22 — sync_conflicts: recreate to align with Desktop schema
+  // SQLite doesn't support ALTER TABLE RENAME/DROP COLUMN, so recreate table
+  await migrateRecreateSyncConflictsTable(db)
 }
 
 async function ensureStockReservationsTable(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -109,4 +115,54 @@ export async function migrateAddColumn(
   } catch {
     // Column already exists — ignore
   }
+}
+
+async function migrateRecreateSyncConflictsTable(db: SQLite.SQLiteDatabase): Promise<void> {
+  // Check if the old schema exists (has conflict_type column)
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_conflicts)`)
+  const existing = cols.map(c => c.name)
+  if (!existing.includes('conflict_type')) return // already migrated or fresh install
+
+  // Create the new table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS sync_conflicts_new (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      sale_id TEXT,
+      device_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      resolved_by TEXT,
+      resolved_at TEXT,
+      created_at TEXT NOT NULL
+    )
+  `)
+
+  // Migrate data from old schema to new schema
+  // Map: conflict_type -> reason, original_payload -> payload, add employee_id (empty)
+  await db.execAsync(`
+    INSERT INTO sync_conflicts_new (id, shop_id, sale_id, device_id, employee_id, reason, payload, status, resolved_by, resolved_at, created_at)
+    SELECT
+      id,
+      shop_id,
+      sale_id,
+      device_id,
+      '' AS employee_id,
+      conflict_type AS reason,
+      original_payload AS payload,
+      status,
+      resolved_by,
+      resolved_at,
+      created_at
+    FROM sync_conflicts
+  `)
+
+  // Drop old table and rename new one
+  await db.execAsync(`DROP TABLE sync_conflicts`)
+  await db.execAsync(`ALTER TABLE sync_conflicts_new RENAME TO sync_conflicts`)
+
+  // Recreate index
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_sync_conflicts_shop ON sync_conflicts(shop_id, status)`)
 }

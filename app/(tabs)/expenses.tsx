@@ -34,7 +34,7 @@ export default function ExpensesScreen() {
         title="Expenses"
         rightAction={
           <TouchableOpacity
-            onPress={() => router.push('/expenses/report')}
+            onPress={() => router.push('/expenses/report' as any)}
             activeOpacity={0.7}
             style={{ padding: 6 }}
           >

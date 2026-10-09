@@ -108,11 +108,11 @@ export async function sendLocalHeartbeat(): Promise<void> {
   const coord = await getCoordinator()
   const isPrimary = coord.isLocalPrimary()
 
-  const hb: Heartbeat = {
+  const hb = {
     deviceId,
     shopId: asShopId(shopId) as never,
     timestamp: new Date().toISOString() as never,
-    isPrimary,
+    isLanHost: isPrimary,
     reachable: true,
     stockSequence: 0,
   }
@@ -135,11 +135,11 @@ export async function initCoordinatorFromDb(): Promise<void> {
 
   for (const device of devices) {
     if (!device.lastSeen) continue
-    const hb: Heartbeat = {
+    const hb = {
       deviceId: device.id,
       shopId: asShopId(shopId ?? 'shop-default') as never,
       timestamp: device.lastSeen as never,
-      isPrimary: (device as never)['isPrimary'] ?? false,
+      isLanHost: (device as never)['isPrimary'] ?? false,
       reachable: true,
       stockSequence: 0,
     }

@@ -73,7 +73,7 @@ export default function DebtReportScreen() {
             {/* Aging buckets */}
             <Text style={[s.sectionTitle, { color: text }]}>Aging Buckets</Text>
             <View style={[s.bucketGrid, { backgroundColor: card, borderColor: border }]}>
-              {(Object.keys(BUCKET_LABELS) as Array<keyof typeof BUCKET_LABELS>).map(key => {
+              {(Object.keys(BUCKET_LABELS) as Array<'0-30' | '31-60' | '61-90' | '90+'>).map(key => {
                 const amount = report.agingBuckets[key] ?? 0
                 const pct = report.totalOutstanding > 0 ? (amount / report.totalOutstanding) * 100 : 0
                 return (
@@ -125,7 +125,7 @@ export default function DebtReportScreen() {
   )
 }
 
-function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: React.ReactElement; color?: string }) {
+function KpiCard({ label, value, icon, color }: { label: string; value: string; icon?: React.ReactNode; color?: string }) {
   const { card, text, muted, border } = useTheme()
   return (
     <View style={[s.kpiCard, { backgroundColor: card, borderColor: border }]}>

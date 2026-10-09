@@ -120,7 +120,7 @@ export default function SettingsScreen() {
             icon={<Building2 size={22} color="#f97316" />}
             title="Business Setup"
             description="Create or manage your business"
-            onPress={() => router.push('/business-setup')}
+            onPress={() => router.push('/business-setup' as any)}
           />
         )}
         {SECTIONS.map((section) => {

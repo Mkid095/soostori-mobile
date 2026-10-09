@@ -100,10 +100,10 @@ export async function refundSale(
       await db.runAsync(
         `INSERT INTO refund_items (id, refund_id, sale_id, product_id, product_name, quantity, unit_price, refund_amount, idempotency_key)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [generateId(), refundId, saleId, item.productId, item.productName, refundQty, item.unitPrice, refundLineAmount, itemKey],
+        [generateId(), refundId ?? '', saleId ?? '', item.productId ?? '', item.productName ?? '', refundQty, item.unitPrice ?? 0, refundLineAmount ?? 0, itemKey ?? ''],
       )
       // Restore stock via refunded ledger movement (idempotent)
-      await refundSaleStock(saleId, item.productId, refundQty, itemKey)
+      await refundSaleStock(saleId, item.productId, refundQty, String(itemKey))
     }
 
     // Update sale status

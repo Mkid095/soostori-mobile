@@ -2,7 +2,7 @@
 // Provides the minimal surface that mobile SDK code needs in tests.
 // Default implementations: no-op permission checks that always succeed.
 
-import type { Member } from '@soostori/auth/permissions'
+import type { Member } from '../types/permissions'
 
 export function hasPermission(_member: Member | null, _capability: string): boolean {
   return true

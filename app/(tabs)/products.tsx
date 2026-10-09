@@ -1,5 +1,5 @@
 // app/(tabs)/products.tsx — Products tab: list with search, category filter, low-stock badge
-import { useState, useCallback, type ListRenderItem } from 'react'
+import { useState, useCallback } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useFocusEffect } from 'expo-router'
@@ -211,7 +211,7 @@ export default function ProductsScreen() {
             )}
           </View>
         }
-        renderItem={({ item }: ListRenderItem<Product>) => (
+        renderItem={({ item }: { item: Product }) => (
           <ProductCard
             product={item}
             theme={theme}

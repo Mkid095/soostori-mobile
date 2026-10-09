@@ -45,6 +45,7 @@ export interface Category {
 
 export interface Sale {
   id: string
+  shopId?: string
   type: 'retail' | 'wholesale' | 'order'
   status: 'pending' | 'pending_offline' | 'completed' | 'cancelled' | 'refunded'
   subtotal: number
@@ -58,6 +59,8 @@ export interface Sale {
   updatedAt: string
   items?: SaleItem[]
   items_summary?: string
+  employeeId?: string
+  deviceId?: string
 }
 
 export interface SaleItem {

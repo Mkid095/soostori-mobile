@@ -8,6 +8,7 @@ import type { TeamInvitation } from '../../services/db-team'
 
 interface Props {
   invitations: TeamInvitation[]
+  error?: string | null
   canManage: boolean
   onCancel: (id: string) => void
 }

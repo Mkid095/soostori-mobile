@@ -22,8 +22,6 @@ const state: any = {
   deviceCreateCount: 0,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   authUserForMagicCode: null as { id: string; email: string } | null,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  authUserForGoogle: null as { id: string; email: string } | null,
   reset() {
     this.employees = []
     this.shops = []
@@ -34,7 +32,6 @@ const state: any = {
     this.shopCreateCount = 0
     this.deviceCreateCount = 0
     this.authUserForMagicCode = null
-    this.authUserForGoogle = null
   },
 }
 
@@ -78,11 +75,6 @@ const mockDb = {
     async signInWithMagicCode({ email, code }: { email: string; code: string }) {
       if (!code || code.length < 6) throw new Error('bad code')
       return { user: state.authUserForMagicCode ?? { id: 'user_mc_1', email } }
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async signInWithGoogle({ idToken }: { idToken: string }) {
-      if (!idToken) throw new Error('bad idToken')
-      return { user: state.authUserForGoogle ?? { id: 'user_gg_1', email: 'goog@example.com' } }
     },
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

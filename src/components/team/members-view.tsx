@@ -8,6 +8,7 @@ import type { MemberWithEmployee } from '../../services/db-team'
 
 interface Props {
   members: MemberWithEmployee[]
+  error?: string | null
   canManage: boolean
   onRolePress: (m: MemberWithEmployee) => void
   onRemove: (id: string, name: string) => void

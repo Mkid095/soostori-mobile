@@ -90,7 +90,7 @@ const styles = {
   amountRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   amount: { fontSize: 15, fontWeight: '800' as const },
   pendingBadge: { backgroundColor: '#F59E0B20', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  pendingBadgeText: { color: '#F59E0B', fontSize: 9, fontWeight: '800' },
+  pendingBadgeText: { color: '#F59E0B', fontSize: 9, fontWeight: '800' as const },
   meta: { fontSize: 11, marginTop: 2 },
   right: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   date: { fontSize: 11 },

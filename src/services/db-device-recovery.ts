@@ -1,5 +1,6 @@
 // Device recovery — restores shop state from cloud snapshot
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SecureStore from 'expo-secure-store'
 import { getDb } from '../lib/db'
 
 const DEVICE_ID_KEY = '@soostori:deviceId'
@@ -66,10 +67,11 @@ export async function isNewDevice(): Promise<boolean> {
 }
 
 export async function clearDeviceIdentity(): Promise<void> {
+  // cloudToken is in SecureStore; rest are in AsyncStorage
+  await SecureStore.deleteItemAsync(CLOUD_TOKEN_KEY).catch(() => {})
   await AsyncStorage.multiRemove([
     DEVICE_ID_KEY,
     CLOUD_DEVICE_ID_KEY,
-    CLOUD_TOKEN_KEY,
     EMPLOYEE_ID_KEY,
     EMPLOYEE_ROLE_KEY,
     '@soostori:serverIp',

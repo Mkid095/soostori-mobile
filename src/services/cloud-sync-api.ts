@@ -33,15 +33,36 @@ export async function cloudUploadEvents(events: Array<{
   await db.transact(operations)
 }
 
-export async function cloudDownloadEvents(shopId: string): Promise<SyncEvent[]> {
+export async function cloudDownloadEvents(
+  shopId: string,
+  since?: string,
+): Promise<SyncEvent[]> {
+  // InstantDB doesn't support orderBy on queries, so filter + sort in-memory
   const result = await db.queryOnce({
-    syncEvents: {
-      $: {
-        where: { shopId },
-      },
-    },
+    syncEvents: { $: { where: { shopId }, limit: 500 } },
   })
-  return (result.data.syncEvents as SyncEvent[]) || []
+  const raw =
+    (result.data.syncEvents as Array<Record<string, unknown>>) ?? []
+
+  const sinceVal = since ?? ''
+  const seen = new Set<string>()
+  const filtered = raw
+    .filter(cev => {
+      const ts = String(cev.serverReceivedAt ?? cev.syncedAt ?? '')
+      if (ts <= sinceVal) return false
+      const key = String(cev.idempotencyKey ?? cev.id ?? '')
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) =>
+      String(a.serverReceivedAt ?? a.syncedAt ?? '').localeCompare(
+        String(b.serverReceivedAt ?? b.syncedAt ?? ''),
+      ),
+    )
+    .slice(0, 100)
+
+  return filtered as unknown as SyncEvent[]
 }
 
 export async function cloudPing(): Promise<{ ok: boolean; serverTime: string }> {

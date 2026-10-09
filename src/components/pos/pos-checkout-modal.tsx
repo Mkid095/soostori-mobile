@@ -121,23 +121,25 @@ export function PosCheckoutModal({ visible, cart, products, shopSettings, onClos
     setIsProcessing(true)
     try {
       const dbMethod: 'cash' | 'mpesa' | 'card' | 'transfer' | 'mobile_money' | 'debt' = isMpesa ? 'mpesa' : selectedPayment
-      const isConnected = lanClient.isConnected()
-      if (isConnected) {
-        const { generateId } = await import('../../lib/formatters')
-        const saleId = generateId()
-        const now = new Date().toISOString()
-        const { buildReceiptData } = await import('../../services/db-receipts')
-        const receipt = buildReceiptData(cart, shopSettings, dbMethod, saleId)
-        setCompletedSale({ receipt })
-        setStep('success')
-      } else {
-        const { createSaleOffline } = await import('../../services/db-sales')
-        const sale = await createSaleOffline(cart, dbMethod, cartTotal, 0, cartTotal)
-        const { buildReceiptData } = await import('../../services/db-receipts')
-        const receipt = buildReceiptData(cart, shopSettings, dbMethod, sale.id)
-        setCompletedSale({ receipt })
-        setStep('success')
+      // P0-9: persist-then-notify. The service ALWAYS writes to local SQLite
+      // first (revenue-integrity fix — cash must never exist without a sale
+      // row). If LAN is connected, it then notifies the host for stock
+      // reconciliation. Receipt is shown only after persist succeeds; LAN
+      // failure is logged but does not block the receipt.
+      const { completePosCheckout } = await import('../../services/pos-checkout-completion')
+      const { receipt, lanEmitted, lanEmitError } = await completePosCheckout({
+        cart,
+        paymentMethod: dbMethod,
+        cartTotal,
+        shopSettings,
+      })
+      if (!lanEmitted && lanEmitError !== undefined) {
+        // Surface a non-blocking warning so support can diagnose stuck
+        // unsynced stock, but do NOT rethrow — the sale is already persisted.
+        console.warn('[pos-checkout] LAN emit failed; sale persisted locally:', lanEmitError)
       }
+      setCompletedSale({ receipt })
+      setStep('success')
     } catch (err) {
       const { Alert } = await import('react-native')
       if (err instanceof Error && err.message.includes('stock')) {

@@ -5,7 +5,7 @@
 // for their email) receives a typed PERSON_NOT_FOUND result. The UI then
 // surfaces the §29 contact phone (UNAUTHORIZED_LOGIN_CONTACT_PHONE) so the
 // user can reach a salesperson for enrollment. No shop is ever created here.
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SecureStore from 'expo-secure-store'
 import { db } from '../lib/instant-client'
 import type { CloudAuthResponse, SubscriptionEntitlement } from '../contracts/cloud'
 import { cacheEntitlement } from './entitlement-cache'
@@ -25,7 +25,7 @@ export async function cloudVerifyMagicCode(email: string, code: string): Promise
   if (!result.user) throw new Error('Authentication failed')
 
   const userId = result.user.id
-  await AsyncStorage.setItem('@soostori:cloudToken', userId)
+  await SecureStore.setItemAsync('@soostori:cloudToken', userId)
 
   const existing = await findExistingEmployee(email)
   if (!existing) {
@@ -82,77 +82,6 @@ export async function resolveSubscription(shopId: string): Promise<SubscriptionE
   }
   await cacheEntitlement(entitlement, entitlement.serverTime)
   return entitlement
-}
-
-/**
- * Exchange a Google ID token for a cloud session via InstantDB.
- *
- * This is called by AuthApiClient.signInWithIdToken in auth-cloud-flow.ts,
- * which is itself called by CloudAuth.signInWithGoogleIdToken from the SDK.
- * The SDK maps the return value to its GoogleSignInResult type.
- */
-export async function cloudExchangeGoogleToken(idToken: string): Promise<{
-  userId: string
-  email: string
-  displayName?: string
-  idToken: string
-  accessToken: string
-  refreshToken?: string
-  isNewUser: boolean
-  employeeId: string
-  shopId: string
-  deviceId: string
-}> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (db.auth as any).signInWithGoogle({ idToken })
-  if (!result.user) throw new Error('Google authentication failed')
-
-  const userId = result.user.id
-  const email = result.user.email ?? ''
-  // Use the InstantDB user.id as the access token — this is the canonical
-  // session identifier for this user in the InstantDB system.
-  await AsyncStorage.setItem('@soostori:cloudToken', userId)
-
-  // Resolve employee record from InstantDB using the authenticated userId as the
-  // personId key (not email — email can change and is not unique across businesses).
-  let employeeId = ''
-  let shopId = ''
-  let deviceId = ''
-  try {
-    const employeesResult = await db.queryOnce({ employees: {} })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const employees = (employeesResult.data.employees as any[]) || []
-    const employee = employees.find((e) => e.personId === userId)
-    if (employee) {
-      employeeId = employee.id ?? ''
-      shopId = employee.shopId ?? ''
-    }
-  } catch { /* employee lookup optional */ }
-
-  // Resolve deviceId from the enrolled devices list using the stored device token.
-  const deviceToken = await AsyncStorage.getItem('@soostori:deviceToken')
-  if (deviceToken) {
-    try {
-      const devicesResult = await db.queryOnce({ devices: {} })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const devices = (devicesResult.data.devices as any[]) || []
-      const device = devices.find((d) => d.connectionToken === deviceToken)
-      if (device) deviceId = device.id ?? ''
-    } catch { /* device lookup optional */ }
-  }
-
-  return {
-    userId,
-    email,
-    displayName: result.user.displayName ?? email.split('@')[0],
-    idToken,
-    accessToken: userId,
-    refreshToken: undefined,
-    isNewUser: result.isNewUser ?? false,
-    employeeId,
-    shopId,
-    deviceId,
-  }
 }
 
 export async function cloudGetServerTime(): Promise<string> {

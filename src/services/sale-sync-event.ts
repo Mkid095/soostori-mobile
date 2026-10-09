@@ -4,8 +4,8 @@
  * Imported by db-sale-create.ts and db-sale-offline.ts.
  */
 
-import { generateId } from '../../lib/formatters'
-import { fromLocalSale } from '../../lib/contracts-mapper'
+import { generateId } from '../lib/formatters'
+import { fromLocalSale } from '../lib/contracts-mapper'
 import { defaultSyncEngine } from '@soostori/contracts'
 import type { SyncEvent } from '@soostori/contracts'
 import type { BusinessId, DeviceId, EmployeeId, IdempotencyKey, SyncEventId } from '@soostori/core'

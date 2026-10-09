@@ -116,7 +116,3 @@ export async function getStockSummary(
     lastMovementAt: lastAt,
   }
 }
-
-function now(): string {
-  return new Date().toISOString()
-}

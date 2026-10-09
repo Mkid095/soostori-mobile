@@ -9,16 +9,24 @@
 import { OfflineQueue } from '@soostori/sync'
 import type { OfflineQueueItem } from '@soostori/sync'
 import type { SoostoriEvent } from '@soostori/events'
+import type { QueueStorage } from '@soostori/sync'
 
 import {
   MobileQueueStorage,
   __setMobileQueueStorageDbForTesting,
 } from './mobile-queue-storage'
 
+/**
+ * TODO: implement LAN sync client to connect to desktop host over local network.
+ * The MobileOfflineSync queue drains to either a LAN client or a Cloud client.
+ * Currently only the offline queue is implemented — no LAN client exists yet.
+ * Phase 3 should add a LanSyncClient that discovers the desktop host via mDNS/Bonjour
+ * and pushes sync events over a WebSocket or HTTP endpoint on the local network.
+ */
 export class MobileOfflineSync {
   readonly queue: OfflineQueue
   constructor(storage: MobileQueueStorage = new MobileQueueStorage()) {
-    this.queue = new OfflineQueue(storage)
+    this.queue = new OfflineQueue(storage as unknown as QueueStorage)
   }
 
   /** Add a domain event to the offline queue. */

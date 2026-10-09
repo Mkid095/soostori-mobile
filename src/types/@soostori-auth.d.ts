@@ -60,26 +60,7 @@ declare module '@soostori/auth' {
     setCookie(name: string, value: string, options?: { httpOnly?: boolean; secure?: boolean; sameSite?: 'Lax' | 'Strict' | 'None'; maxAge?: number; path?: string }): void | Promise<void>
   }
 
-  export interface GoogleOAuthConfig {
-    clientId: string
-    redirectUri: string
-    scopes?: string[]
-    codeChallengeMethod?: 'S256'
-  }
-
-  export interface GoogleSignInResult {
-    userId: string
-    email: string
-    displayName?: string
-    idToken: string
-    accessToken: string
-    isNewUser: boolean
-  }
-
-  export interface GoogleSignInPartial {
-    state: string
-    code?: string
-  }
+  // Google Sign-In types removed.
 
   export interface EmailRegistrationResult {
     userId: string
@@ -168,8 +149,9 @@ declare module '@soostori/auth' {
   export type AuthEventListener = (event: AuthEvent) => void
 
   export interface AuthApiClient {
-    exchangeGoogleCode(code: string, codeVerifier: string, redirectUri: string): Promise<AuthApiResponse<GoogleSignInResult>>
-    linkGoogleAccount(idToken: string, sessionAccessToken: string): Promise<AuthApiResponse<GoogleSignInResult>>
+    // Google Sign-In methods removed.
+    exchangeGoogleCode(): Promise<AuthApiResponse<never>>
+    linkGoogleAccount(): Promise<AuthApiResponse<never>>
     registerEmail(email: string, password: string, employeeName: string): Promise<AuthApiResponse<EmailRegistrationResult>>
     verifyEmail(token: string): Promise<AuthApiResponse<EmailVerificationResult>>
     requestPasswordReset(email: string): Promise<AuthApiResponse<PasswordResetRequestResult>>
@@ -188,8 +170,6 @@ declare module '@soostori/auth' {
     readonly session: StoredSession | null
     readonly isSessionStale: boolean
     readonly hasValidSession: boolean
-    signInWithGoogle(config: GoogleOAuthConfig): Promise<AuthResult<GoogleSignInResult>>
-    handleOAuthCallback(partial: GoogleSignInPartial, codeVerifier: string, redirectUri: string): Promise<AuthResult<GoogleSignInResult>>
     signInWithEmail(email: string, password: string): Promise<AuthResult<SignInResult>>
     registerWithEmail(email: string, password: string, employeeName: string, sendVerificationEmail?: boolean): Promise<AuthResult<EmailRegistrationResult>>
     verifyEmailAddress(token: string): Promise<AuthResult<EmailVerificationResult>>

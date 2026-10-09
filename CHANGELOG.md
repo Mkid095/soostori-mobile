@@ -4,6 +4,58 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### P0-9 — Mobile POS Sale-Loss-on-LAN Fix (audit 2026-10-05)
+
+**What changed:** Fixed the LAN-connected mobile POS path so the sale is **always** written to local SQLite before the receipt is shown. Previously, when the customer paid via a LAN-connected mobile, the sale was shown as complete and a receipt was built — but no row was written to SQLite and no `lanClient.emitSalePending` was sent to the host. If the LAN dropped mid-transaction or the user navigated away before host confirmation, the sale was **lost**. Cash could be taken for a sale that did not exist anywhere.
+
+**Bug:** `src/components/pos/pos-checkout-modal.tsx:124-132` — the LAN branch generated a fresh `saleId`, built a receipt, and set `step='success'` **without** calling `createSaleOffline` (local persist) and **without** calling `lanClient.emitSalePending` (host notification). The offline branch (next-else) correctly called `createSaleOffline`. The two branches were structured as parallel cases instead of layered steps: "persist first, notify second".
+
+**Fix (persist-then-notify layering):**
+- **`src/services/pos-checkout-completion.ts`** (NEW, 91 lines) — single source of truth for sale completion. `completePosCheckout({ cart, paymentMethod, cartTotal, shopSettings })`:
+  1. **Persist** — always calls `createSaleOffline(cart, paymentMethod, subtotal, 0, totalAmount)`. Writes the sale + `sale_items` + stock movements + sync event in one atomic transaction. Throws on SQLite failure, RBAC denial, subscription block, or stock gate — the caller MUST NOT show a receipt in that case.
+  2. **Notify** — if `lanClient.isConnected()`, calls `lanClient.emitSalePending({ saleId, items, totalAmount, paymentMethod, employeeId, deviceId, timestamp })` for host stock reconciliation. Wrapped in `try`/`catch`; LAN failure (socket drop, host offline) is captured as `lanEmitError` and the sale is still on disk.
+  3. **Receipt** — only built after step 1 succeeds, using the persisted `sale.id` (not a fresh `generateId()`, so the receipt number and the SQLite row are guaranteed to match).
+- **`src/components/pos/pos-checkout-modal.tsx:119-151`** — `handleComplete` now delegates to `completePosCheckout`. The component still owns UI state (`isProcessing`, `step`, `completedSale`, alert); the service owns persistence + LAN. Result includes `{ sale, receipt, lanEmitted, lanEmitError? }`. If `lanEmitted === false && lanEmitError !== undefined`, the component logs a `console.warn` but does NOT block the receipt — the sale is already on disk and the cloud sync engine will reconcile the host on the next push.
+- **`src/components/pos/__tests__/pos-checkout-lan-persistence.spec.ts`** (NEW, 8 tests) — jest spec that pins the contract:
+  - **P0-9-A** — LAN-connected path calls `createSaleOffline` **before** `emitSalePending` (verified via call-order array).
+  - **P0-9-B** — LAN-disconnected path still calls `createSaleOffline`; `emitSalePending` is not called; `lanEmitted=false`, `lanEmitError=undefined`.
+  - **P0-9-C** — LAN failure **after** local persist does NOT crash; `lanEmitError` is surfaced as an `Error` and the receipt is still returned.
+  - **P0-9-D** — `createSaleOffline` is called with the exact `(cart, paymentMethod, subtotal, 0, totalAmount)` signature.
+  - **P0-9-E** — `emitSalePending` receives the persisted `saleId` (not a fresh `generateId()`), the mapped cart items, and the metadata (`totalAmount`, `paymentMethod`, `timestamp`).
+  - **P0-9-F** — `createSaleOffline` failure throws and skips `emitSalePending` + `buildReceiptData` — the receipt is never built for a sale that does not exist.
+  - **P0-9-G** — `buildReceiptData` is called with the persisted `sale.id` (proves the link, not a fresh id).
+  - **P0-9-H** — a no-op LAN state (`isConnected()` returns false) returns `lanEmitted=false` with no error.
+- **Mocking strategy:** ts-jest transpiles to CommonJS, so `jest.unstable_mockModule` (ESM-only) does not apply. The spec uses `jest.doMock` + `require` so the CJS `require()` calls inside the service pick up the mock factories.
+
+**Result:** Mobile POS now persists every sale to local SQLite before showing a receipt, regardless of LAN state. The host receives a `SALE_PENDING` notification for stock reconciliation when LAN is connected; if LAN drops, the sale is still on disk and the cloud sync engine will reconcile. The race condition in the original LAN branch is gone: `step='success'` is set only after both `createSaleOffline` succeeds AND the LAN emit completes-or-fails.
+
+**Files changed:** `src/components/pos/pos-checkout-modal.tsx`, `src/services/pos-checkout-completion.ts` (new), `src/components/pos/__tests__/pos-checkout-lan-persistence.spec.ts` (new), `CHANGELOG.md`.
+
+**Follow-up not in this change:**
+- `src/components/pos/useCheckoutSale.ts` (dead code, never imported) contains the **same** sale-loss-on-LAN bug. It is a stub hook from a previous refactor that was never wired up — the active path is the inline `handleComplete` in `pos-checkout-modal.tsx` (now fixed). Recommended action: delete `useCheckoutSale.ts` to prevent a future engineer from "fixing" it while leaving the active path broken (P2-followup).
+- The `useSaleLanEvents` hook at `src/hooks/useSaleLanEvents.ts` is wired in `pos-checkout-modal.tsx:45-51` but `pendingSaleId` is never set, so the hook is currently a no-op. Wiring `pendingSaleId = sale.id` after a successful persist would let the host confirmation (SALE_CONFIRMED / SALE_REJECTED) update the receipt in real time and surface insufficient-stock rejections to the cashier without manual refresh. Out of scope for P0-9 (which only fixes the lost-sale defect); tracked as a UX follow-up.
+- "Sale in progress" indicator for the case where the user navigates away while `createSaleOffline` is in flight: the current `isProcessing` state is the only signal. The transaction is atomic, so the data will land on disk, but the receipt modal is lost. Recommended: persist a `pending_sale` row at the start of the flow and clear it on success — gives a recovery hook for crash-mid-sale (P1-followup).
+
+**`npx jest src/components/pos/__tests__/pos-checkout-lan-persistence.spec.ts`:** 8/8 pass.
+**`npx tsc --noEmit`:** zero new errors in P0-9 files (3 errors in `pos-checkout-lan-persistence.spec.ts` fixed by switching from `jest.unstable_mockModule` to `jest.doMock` + `require`; the pre-existing `unstable_mockModule` typing gap in `refund-modal.spec.ts` is unchanged and pre-existed this change).
+
+### Phase 5G — P0-10 Mobile LAN Discovery Fix
+
+**What changed:** Fixed mobile LAN discovery handshake that was returning 404 before any mobile could pair with a desktop host. Extracted the HTTP ping/pair logic out of the hook into a testable pure helper with friendly, IP-aware error messages.
+
+**Bug:** `useLanDiscovery.ts` was issuing `GET http://<ip>:18792/api/ping`, but the desktop-side LAN server (`src/services/lan-server.ts:105-109`) only serves `GET /` returning `{ status: 'ok', shopId, deviceId }`. Every pairing attempt died with `Server returned 404`, so no mobile could ever complete LAN pairing.
+
+**Fix:**
+- `src/hooks/lan-discovery-http.ts` — NEW (123 lines): `pingLanServer(serverIp, fetchImpl?)` and `requestLanPairing({ serverIp, deviceId, deviceName, fetchImpl? })`. Discriminated-union `LanDiscoveryFailure` (kinds: `invalid-ip | unreachable | timeout | http | pair-rejected | malformed`) carries the structured cause so the UI can render actionable messages. 5s timeout on ping, 10s on pairing, via the project's existing `AbortSignal.timeout()` pattern. `fetchImpl` is injectable for tests.
+- `src/hooks/useLanDiscovery.ts` — Slimmed to 48 lines. Hook now delegates the network I/O to `pingLanServer` and `requestLanPairing`. Empty-IP guard surfaces an `Enter the desktop host IP address.` message before any fetch is attempted.
+- `src/hooks/__tests__/lan-discovery-http.test.ts` — NEW: 44 assert-style tests covering: hits `GET /` (not `/api/ping`), AbortSignal attached, whitespace IP trimming, empty-IP short-circuit, 404 with status carried, network error includes IP+port+desktop hint, timeout produces `kind=timeout`, malformed JSON / unexpected shape, pairing body fields, default `"Mobile Device"` name, server-error propagation, status fallback when pairing body is bad. Run with `npx tsx src/hooks/__tests__/lan-discovery-http.test.ts`.
+
+**Result:** Mobile LAN pairing now actually works. The original "Server returned 404" is replaced with a typed `LanDiscoveryFailure` whose `detail.message` includes the typed IP+port, the timeout window, and an actionable next step ("check the IP and that the desktop app is running").
+
+**Follow-up not in this change:** The `lan-server.ts` file (the actual HTTP+WS server) currently lives in `src/services/` of the mobile repo even though it imports Node-only modules — see master audit P1-followup #43 ("Move `lan-server.ts` to desktop repo"). Out of scope for P0-10.
+
+**Files changed:** `src/hooks/lan-discovery-http.ts` (new), `src/hooks/useLanDiscovery.ts`, `src/hooks/__tests__/lan-discovery-http.test.ts` (new), `CHANGELOG.md`.
+
 ### Phase 2 — Mobile Business SDK Audit
 
 **What changed:** Updated `@soostori/*` SDK packages to Phase 2 accepted versions per `PHASE-02-BUSINESS-ACCEPTANCE.md`.

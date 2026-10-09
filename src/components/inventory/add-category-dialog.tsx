@@ -8,11 +8,20 @@ const PRESET_COLORS = [
   '#3B82F6', '#8B5CF6', '#EC4899', '#06B6D4',
 ]
 
+interface ThemeColors {
+  card: string
+  text: string
+  bg: string
+  textSecondary: string
+  border: string
+  brand: string
+}
+
 interface Props {
   visible: boolean
   onClose: () => void
   onCreated: (name: string, color: string) => void
-  c: Record<string, string>
+  c: ThemeColors
 }
 
 export function AddCategoryDialog({ visible, onClose, onCreated, c }: Props) {

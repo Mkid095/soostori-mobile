@@ -1,19 +1,22 @@
 // cloud-auth.ts — Session management and re-exports
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as SecureStore from 'expo-secure-store'
 
 // Re-export backend functions for backward compatibility
 export {
   cloudSendMagicCode,
   cloudVerifyMagicCode,
-  cloudExchangeGoogleToken,
   resolveSubscription,
   cloudGetServerTime,
 } from './cloud-auth-backend'
 export type { CloudAuthResult } from './cloud-auth-backend'
 
+const CLOUD_TOKEN_KEY = '@soostori:cloudToken'
+
 export async function cloudLogout(): Promise<void> {
+  // cloudToken is stored in SecureStore; shop/employee remain in AsyncStorage
+  await SecureStore.deleteItemAsync(CLOUD_TOKEN_KEY).catch(() => {})
   await AsyncStorage.multiRemove([
-    '@soostori:cloudToken',
     '@soostori:shopId',
     '@soostori:employeeId',
     '@soostori:employeeRole',
@@ -36,7 +39,7 @@ export async function getSession(): Promise<{
   employeeRole: string | null
 }> {
   const [userId, shopId, employeeId, employeeRole] = await Promise.all([
-    AsyncStorage.getItem('@soostori:cloudToken'),
+    SecureStore.getItemAsync(CLOUD_TOKEN_KEY),
     AsyncStorage.getItem('@soostori:shopId'),
     AsyncStorage.getItem('@soostori:employeeId'),
     AsyncStorage.getItem('@soostori:employeeRole'),

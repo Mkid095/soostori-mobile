@@ -34,7 +34,7 @@ export default function TeamTab() {
   if (restricted) {
     // Redirect cashier/attendant away from team tab
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { router.replace('/(tabs)/sell') }, [])
+    useEffect(() => { router.replace('/(tabs)/sell' as any) }, [])
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text style={{ color: '#94A3B8', fontSize: 14 }}>Not available</Text>

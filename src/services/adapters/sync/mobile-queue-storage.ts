@@ -28,6 +28,8 @@ export interface LegacyRow {
 export { newQueueItemId }
 
 export class MobileQueueStorage implements QueueStorage {
+  async saveProcessedEvents?(_events: OfflineQueueItem[]): Promise<void> {}
+  async loadProcessedEvents?(): Promise<OfflineQueueItem[]> { return [] }
   private _sqlite = new MobileQueueSqlite()
 
   async getAll(): Promise<OfflineQueueItem[]> {
@@ -59,4 +61,6 @@ interface QueueStorage {
   save(item: OfflineQueueItem): Promise<void>
   delete(id: string): Promise<void>
   pruneSent(): Promise<void>
+  saveProcessedEvents?(events: OfflineQueueItem[]): Promise<void>
+  loadProcessedEvents?(): Promise<OfflineQueueItem[]>
 }

@@ -14,7 +14,6 @@ import type {
   AuthApiClient,
   AuthEvent,
   StoredSession,
-  GoogleSignInResult,
   SignInResult,
   TrustedDevice,
 } from '@soostori/auth'

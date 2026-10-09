@@ -10,6 +10,7 @@ import { X, Building2, Check, ChevronRight } from 'lucide-react-native'
 import { AppHeader } from '../src/components/shared/app-header'
 import { useTheme } from '../src/hooks/useTheme'
 import { useBusinessSwitcher } from '../src/hooks/useBusinessSwitcher'
+import type { BusinessListItem } from '../src/types/types-business-setup'
 
 interface BusinessSwitcherProps {
   visible: boolean

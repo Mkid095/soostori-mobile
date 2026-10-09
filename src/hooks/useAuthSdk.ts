@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import { cacheEntitlement } from '../services/entitlement-cache'
 import { rnPlatformAdapter, rnOperationalPlatformAdapter } from '../services/sdk-adapter'
-import { type AuthSdkState, type AuthResult, type AuthErrorCode, type DeviceEnrollmentState, type OperationalSession } from './auth-types'
-import { createCloudAuth, signInWithGoogle as cloudSignIn } from './auth-cloud-flow'
+import { type AuthResult, type AuthErrorCode, type DeviceEnrollmentState, type OperationalSession } from './auth-types'
+import { createCloudAuth } from './auth-cloud-flow'
 import { setupPin, verifyPin, getLocalHasPin } from './auth-pin-flow'
 import { determineEnrollmentState } from './auth-device-enrollment'
 import type { AuthEvent } from '@soostori/auth'
@@ -98,21 +98,6 @@ export function useAuthSdk() {
     }
   }, [])
 
-  const signInWithGoogle = useCallback(async (idToken: string) => {
-    if (!cloudAuthRef.current) throw new Error('Auth not initialized')
-    setState((s) => ({ ...s, isLoading: true, error: null, enrollmentError: undefined }))
-    const { ok, result } = await cloudSignIn(cloudAuthRef.current, idToken)
-    if (!ok || !result?.ok) {
-      const err = result?.error ?? { code: 'AUTH_FAILED' as AuthErrorCode, message: 'Unknown error' }
-      setState((s) => ({ ...s, isLoading: false, error: err.message })); return { ok: false, error: err } as AuthResult<never>
-    }
-    const { userId, email, shopId, cloudDeviceId } = result.data
-    await AsyncStorage.setItem('@soostori:cloudToken', userId); await AsyncStorage.setItem('@soostori:shopId', shopId)
-    const deviceId = deviceIdRef.current || ''
-    const { enrollmentState, enrollmentError } = await determineEnrollmentState(shopId, deviceId, cloudDeviceId === '')
-    setState((s) => ({ ...s, isCloudAuthenticated: true, cloudUser: { id: userId, email }, shopId, enrollmentState, enrollmentError, isLoading: false }))
-    return { ok: true, data: result.data } as AuthResult<typeof result.data>
-  }, [])
 
   const setupPinFn = useCallback(async (pin: string) => {
     if (!opAuthRef.current || !state.shopId || !deviceIdRef.current || !state.cloudUser) return { ok: false, error: { code: 'UNKNOWN' as AuthErrorCode, message: 'Auth not ready' } } as AuthResult<never>
@@ -159,5 +144,5 @@ export function useAuthSdk() {
     }
   }, [signOut])
 
-  return { ...state, signInWithGoogle, setupPin: setupPinFn, verifyPin: verifyPinFn, hasPinEnrolled, signOut, refreshSession }
+  return { ...state, setupPin: setupPinFn, verifyPin: verifyPinFn, hasPinEnrolled, signOut, refreshSession }
 }

@@ -1,5 +1,6 @@
 // app/(tabs)/inventory.tsx — Phase 09: Inventory summary + quick actions + low-stock + movements
 import { useState, useEffect, useCallback } from 'react'
+import type { Product } from '../../src/types/types-pos'
 import { View, Text, FlatList, TouchableOpacity, TextInput, Alert, StyleSheet, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -250,7 +251,7 @@ export default function InventoryScreen() {
   const router = useRouter()
   const { bg, card, text, textSecondary: muted, border, brand } = useTheme()
   const [summary, setSummary] = useState<{ totalProducts: number; totalValue: number; lowStockCount: number; lowStockProducts: Array<{ id: string; name: string; stockQuantity: number; threshold: number; sellingPrice: number }> } | null>(null)
-  const [products, setProducts] = useState<Array<{ id: string; name: string; stockQuantity: number; threshold: number; sellingPrice: number }>>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'movements'>('overview')

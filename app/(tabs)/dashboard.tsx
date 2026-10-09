@@ -119,7 +119,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={['bottom']}>
-      <AppHeader title="Dashboard" rightSlot={<OnlineBadge />} />
+      <AppHeader title="Dashboard" rightAction={<OnlineBadge />} />
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -176,10 +176,15 @@ export default function DashboardScreen() {
                 icon={<Package size={20} color={danger} />}
                 color={danger}
                 sub={stock.outOfStockCount > 0 ? `${stock.outOfStockCount} out` : undefined}
+                card={card}
+                border={border}
+                text={text}
+                textMuted={textMuted}
+                danger={danger}
               />
             </>
           ) : (
-            <StatCard label="Low Stock" value="—" icon={<Package size={20} color={danger} />} color={danger} />
+            <StatCard label="Low Stock" value="—" icon={<Package size={20} color={danger} />} color={danger} card={card} border={border} text={text} textMuted={textMuted} danger={danger} />
           )}
           {debt ? (
             <>
@@ -189,10 +194,15 @@ export default function DashboardScreen() {
                 icon={<Users size={20} color="#f59e0b" />}
                 color="#f59e0b"
                 sub={debt.overdueDebtCount > 0 ? `${debt.overdueDebtCount} overdue` : undefined}
+                card={card}
+                border={border}
+                text={text}
+                textMuted={textMuted}
+                danger={danger}
               />
             </>
           ) : (
-            <StatCard label="Active Debts" value="—" icon={<Users size={20} color="#f59e0b" />} color="#f59e0b" />
+            <StatCard label="Active Debts" value="—" icon={<Users size={20} color="#f59e0b" />} color="#f59e0b" card={card} border={border} text={text} textMuted={textMuted} danger={danger} />
           )}
         </View>
 
@@ -266,7 +276,7 @@ export default function DashboardScreen() {
   )
 }
 
-function StatCard({ label, value, icon, color, sub }: { label: string; value: string; icon: React.ReactElement; color: string; sub?: string }) {
+function StatCard({ label, value, icon, color, sub, card, border, text, textMuted, danger }: { label: string; value: string; icon: React.ReactElement; color: string; sub?: string; card: string; border: string; text: string; textMuted: string; danger: string }) {
   return (
     <View style={{ flex: 1, backgroundColor: card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: border, alignItems: 'center' }}>
       <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: color + '20', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>

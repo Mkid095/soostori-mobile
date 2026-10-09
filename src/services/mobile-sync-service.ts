@@ -91,7 +91,7 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
   await enforceSubscriptionForSync()
 
   // Phase 19: Check offline policy at start of sync cycle
-  const { offlinePolicyService, checkAndRecordOnline } = await import('./offline-policy-service')
+  const { offlinePolicyService, checkAndRecordOnline: checkOnline1 } = await import('./offline-policy-service')
   await offlinePolicyService.checkPolicy()
 
   const shopId = await getCurrentShopId()
@@ -100,7 +100,7 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
   const lastSyncAt = await getSyncCursor()
   const { events, cursor } = await realPull(lastSyncAt)
   if (events.length === 0) {
-    await checkAndRecordOnline()
+    await checkOnline1()
     return { pulled: 0, applied: 0 }
   }
 
@@ -141,8 +141,8 @@ export async function pullAndApply(): Promise<{ pulled: number; applied: number 
     await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString())
   }
   // Phase 19: record online after successful sync cycle
-  const { checkAndRecordOnline } = await import('./offline-policy-service')
-  await checkAndRecordOnline()
+  const { checkAndRecordOnline: checkOnline2 } = await import('./offline-policy-service')
+  await checkOnline2()
   return { pulled: events.length, applied }
 }
 

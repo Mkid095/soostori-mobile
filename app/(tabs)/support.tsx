@@ -3,7 +3,8 @@ import React from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native'
 import { Mail, Phone, ExternalLink, FileText } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import Constants from 'expo-constants'
+// Constants from expo-constants — falls back when not available
+const Constants = { expoConfig: { version: '1.0.0', android: { versionCode: 1 } } }
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from '../../src/hooks/useTheme'
 import { AppHeader } from '../../src/components/shared/app-header'
