@@ -109,6 +109,7 @@ jobs:
 
       - name: Setup Android SDK
         run: |
+          set +e
           # Find SDK location
           SDK_PATH=$(find / -maxdepth 4 -name "build-tools" -type d 2>/dev/null | head -1 | xargs dirname 2>/dev/null)
           if [ -z "$SDK_PATH" ]; then
@@ -117,14 +118,18 @@ jobs:
           echo "ANDROID_HOME=$SDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$SDK_PATH" >> $GITHUB_ENV
           # Find sdkmanager
-          SDKMANAGER=$(find $SDK_PATH -name sdkmanager 2>/dev/null | head -1)
+          SDKMANAGER=$(find "$SDK_PATH" -name sdkmanager 2>/dev/null | head -1)
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_PATH/cmdline-tools/latest/bin/sdkmanager"
+          fi
           echo "SDKMANAGER=$SDKMANAGER"
           # Accept licenses
-          yes 2>/dev/null | $SDKMANAGER --licenses || true
+          yes 2>/dev/null | "$SDKMANAGER" --licenses || true
           # Install required packages
-          $SDKMANAGER "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
           # Verify SDK
-          ls -la $ANDROID_HOME/
+          ls -la "$ANDROID_HOME"/
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Build debug APK
         env:
