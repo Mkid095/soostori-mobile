@@ -124,8 +124,12 @@ jobs:
           ANDROID_HOME: /usr/lib/android-sdk
           ANDROID_SDK_ROOT: /usr/lib/android-sdk
         run: |
-          # Write local.properties so gradle finds the SDK
+          # Verify SDK exists
+          echo "=== SDK location ==="
+          ls -la /usr/lib/android-sdk/ 2>&1 | head -10
+          echo "=== local.properties ==="
           echo "sdk.dir=/usr/lib/android-sdk" > android/local.properties
+          cat android/local.properties
           chmod +x ./android/gradlew
           ./android/gradlew --project-dir android assembleDebug
           ls -la android/app/build/outputs/apk/debug/
