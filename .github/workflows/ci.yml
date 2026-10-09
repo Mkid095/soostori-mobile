@@ -121,9 +121,11 @@ jobs:
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: /usr/lib/android-sdk
+          ANDROID_SDK_ROOT: /usr/lib/android-sdk
         run: |
+          # Write local.properties so gradle finds the SDK
+          echo "sdk.dir=/usr/lib/android-sdk" > android/local.properties
           chmod +x ./android/gradlew
           ./android/gradlew --project-dir android assembleDebug
           ls -la android/app/build/outputs/apk/debug/
