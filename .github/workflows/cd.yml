@@ -1,18 +1,16 @@
 name: CD (Deploy via EAS)
 
 on:
-  # Option A: Auto-deploy when CI succeeds on master
   workflow_run:
     workflows: [CI]
     branches: [master]
     types: [completed]
-  # Option B: Manual trigger for releases
   workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-  EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
+  EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID || vars.EXPO_PROJECT_ID }}
 
 jobs:
   check-ci-passed:
@@ -63,20 +61,19 @@ jobs:
             echo "EXPO_TOKEN secret is missing or empty. Add it in GitHub repo settings."
             exit 1
           fi
+
           if [ -z "${EXPO_PROJECT_ID}" ]; then
-            echo "EXPO_PROJECT_ID secret is missing or empty. Add the Expo project ID from the EAS project settings."
+            echo "EXPO_PROJECT_ID is missing. Set either the repo secret or repo variable."
+            echo "Get it from Expo Dashboard → Project Settings → Project ID"
             exit 1
           fi
 
-      - name: Install EAS CLI
-        run: pnpm add -g eas-cli
-
       - name: Create EAS Update (development channel)
         run: |
-          eas update --non-interactive --channel development --message "Auto-deploy: ${{ github.sha }}"
+          npx eas-cli@latest update --non-interactive --channel development --message "Auto-deploy: ${{ github.sha }}"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
+          EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID || vars.EXPO_PROJECT_ID }}
 
   create-github-release:
     name: Create GitHub Release
